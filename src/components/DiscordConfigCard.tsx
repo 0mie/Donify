@@ -779,6 +779,99 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* 🏷️ Embed Footer & Branding Customization */}
+              <div className="space-y-3 pt-3 border-t border-neutral-800/80">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-300 uppercase tracking-wider">
+                    <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Notification Footer Name & Icon</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-400">Embed Bottom Bar</span>
+                </div>
+                <p className="text-[11px] text-neutral-400">
+                  Customize the footer text and icon shown at the very bottom of each Discord notification card.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="text-neutral-400 block mb-1">Donation Footer Text / Name</label>
+                    <input
+                      type="text"
+                      value={localConfig.footerText ?? 'Tiltify Donation Alerts'}
+                      onChange={(e) => handleInputChange('footerText', e.target.value)}
+                      placeholder="Tiltify Donation Alerts"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Appears before the timestamp (e.g. &quot;Spring Charity Stream • Tiltify&quot;).
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-neutral-400 block mb-1">Auction Footer Text</label>
+                    <input
+                      type="text"
+                      value={localConfig.auctionFooterText ?? 'Tiltify Auction House • Winner Fulfillment'}
+                      onChange={(e) => handleInputChange('auctionFooterText', e.target.value)}
+                      placeholder="Tiltify Auction House • Winner Fulfillment"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Displayed on auction ended / winner fulfillment cards.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-1 text-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-neutral-400 block">Footer Icon Image URL</label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('footerIconUrl', '')}
+                        className="text-[10px] text-teal-400 hover:text-teal-300 transition-colors"
+                      >
+                        Reset to Tiltify Logo
+                      </button>
+                      {localConfig.botAvatarUrl && (
+                        <>
+                          <span className="text-neutral-600">•</span>
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange('footerIconUrl', localConfig.botAvatarUrl)}
+                            className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors"
+                          >
+                            Use Bot Avatar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-neutral-950 border border-neutral-800 flex items-center justify-center overflow-hidden shrink-0">
+                      <img
+                        src={localConfig.footerIconUrl || '/tiltify-icon.jpg'}
+                        alt="Footer preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/tiltify-icon.jpg';
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={localConfig.footerIconUrl || ''}
+                      onChange={(e) => handleInputChange('footerIconUrl', e.target.value)}
+                      placeholder="Leave blank for Tiltify icon, or paste any image URL..."
+                      className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                    />
+                  </div>
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    Fixed! Discord embed footers require a valid PNG or JPG image URL. Leaving this blank now serves our crisp, verified Tiltify emblem.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Buttons */}

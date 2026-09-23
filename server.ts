@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import path from "path";
+import fs from "fs";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import {
@@ -59,6 +60,9 @@ const state: {
     enableAuctionAlerts: true,
     auctionMessagePrefix: "🔨 AUCTION ENDED! Winning bid and prize fulfillment details:",
     onlyNotifyPrizeAuctions: false,
+    footerText: process.env.DISCORD_FOOTER_TEXT || "Tiltify Donation Alerts",
+    footerIconUrl: process.env.DISCORD_FOOTER_ICON_URL || "",
+    auctionFooterText: process.env.DISCORD_AUCTION_FOOTER_TEXT || "Tiltify Auction House • Winner Fulfillment",
   },
   tiltify: {
     clientId: (process.env.TILTIFY_CLIENT_ID || "").trim(),
@@ -281,7 +285,10 @@ async function dispatchDiscordAlert(
       embedTitle = `🏆 AUCTION HOUSE: Auction Ended & Finalized!`;
       embedDescription = `**${auction.winnerName || donation.donorName}** won **${auction.itemTitle}** with a winning bid of **${formattedAmount}**!`;
       embedColor = hexToDiscordColor(config.auctionEmbedColor || "#F59E0B");
-      embedFooterText = `Tiltify Auction House • Winner Fulfillment • ${new Date(donation.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const timeStr = new Date(donation.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      embedFooterText = config.auctionFooterText?.trim()
+        ? `${config.auctionFooterText.trim()} • ${timeStr}`
+        : `Tiltify Auction House • Winner Fulfillment • ${timeStr}`;
 
       // 1. Winning Bid & Winner
       embedFields.push(
@@ -403,7 +410,10 @@ async function dispatchDiscordAlert(
       embedTitle = `🎉 New Donation: ${formattedAmount}!`;
       embedDescription = `**${donation.donorName || "An anonymous donor"}** contributed to the campaign!`;
       embedColor = hexToDiscordColor(config.embedColor);
-      embedFooterText = `Tiltify Donation Alerts • ${new Date(donation.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const timeStr = new Date(donation.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      embedFooterText = config.footerText?.trim()
+        ? `${config.footerText.trim()} • ${timeStr}`
+        : `Tiltify Donation Alerts • ${timeStr}`;
 
       embedFields.push(
         {
@@ -527,6 +537,19 @@ async function dispatchDiscordAlert(
       }
     }
 
+    let resolvedFooterIconUrl = (config.footerIconUrl || "").trim();
+    if (!resolvedFooterIconUrl) {
+      if (state.publicBaseUrl) {
+        resolvedFooterIconUrl = `${state.publicBaseUrl}/api/discord/tiltify-icon`;
+      } else {
+        resolvedFooterIconUrl = "https://site-assets.tiltify.com/frontend-users/favicon.ico";
+      }
+    } else if (resolvedFooterIconUrl.startsWith("/")) {
+      if (state.publicBaseUrl) {
+        resolvedFooterIconUrl = `${state.publicBaseUrl}${resolvedFooterIconUrl}`;
+      }
+    }
+
     const embed = {
       title: embedTitle,
       description: embedDescription,
@@ -534,7 +557,7 @@ async function dispatchDiscordAlert(
       fields: embedFields,
       footer: {
         text: embedFooterText,
-        icon_url: "https://tiltify.com/favicon.ico",
+        icon_url: resolvedFooterIconUrl,
       },
       timestamp: donation.receivedAt || new Date().toISOString(),
     };
@@ -1446,8 +1469,19 @@ app.get("/api/discord/avatar", (req: Request, res: Response) => {
     res.set("Cache-Control", "public, max-age=3600");
     res.send(state.customAvatar.buffer);
   } else {
-    res.redirect("https://tiltify.com/favicon.ico");
+    res.redirect("https://site-assets.tiltify.com/frontend-users/favicon.ico");
   }
+});
+
+// 2.35 GET /api/discord/tiltify-icon: Serve crisp high-res icon for Discord embed footers
+app.get("/api/discord/tiltify-icon", (_req: Request, res: Response) => {
+  const iconPath = path.join(process.cwd(), "public", "tiltify-icon.jpg");
+  if (fs.existsSync(iconPath)) {
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=86400");
+    return res.sendFile(iconPath);
+  }
+  res.redirect("https://site-assets.tiltify.com/frontend-users/favicon.ico");
 });
 
 // 2.4 DELETE /api/discord/avatar: Reset bot icon back to default Tiltify icon

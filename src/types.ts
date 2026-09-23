@@ -57,6 +57,9 @@ export interface DiscordConfig {
   enableAuctionAlerts: boolean;
   auctionMessagePrefix: string;
   onlyNotifyPrizeAuctions: boolean;
+  footerText?: string;
+  footerIconUrl?: string;
+  auctionFooterText?: string;
 }
 
 export interface TiltifyConfig {

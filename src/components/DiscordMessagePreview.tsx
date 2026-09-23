@@ -430,8 +430,19 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
 
             {/* Footer */}
             <div className="flex items-center gap-1.5 text-[11px] text-[#949ba4] mt-2 pt-2 border-t border-[#35373c]">
-              <img src="https://tiltify.com/favicon.ico" alt="" className="w-3.5 h-3.5 rounded-full" />
-              <span>{isAuction ? 'Tiltify Auction House Alert' : 'Tiltify Donation Alerts'} • 12:00 PM</span>
+              <img
+                src={config.footerIconUrl || "/tiltify-icon.jpg"}
+                alt=""
+                className="w-3.5 h-3.5 rounded-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "/tiltify-icon.jpg";
+                }}
+              />
+              <span>
+                {isAuction
+                  ? (config.auctionFooterText?.trim() || 'Tiltify Auction House • Winner Fulfillment')
+                  : (config.footerText?.trim() || 'Tiltify Donation Alerts')} • 12:00 PM
+              </span>
             </div>
           </div>
         </div>
