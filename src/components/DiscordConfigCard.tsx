@@ -283,6 +283,22 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                     Switch to Webhook (Recommended)
                   </button>
                 )}
+                {localConfig.mode === 'webhook' && localConfig.webhookUrl?.includes('discord.com') && (statusMessage.text.includes('1015') || statusMessage.text.includes('discordapp.com') || statusMessage.text.includes('429')) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = localConfig.webhookUrl.replace('discord.com', 'discordapp.com');
+                      handleInputChange('webhookUrl', updated);
+                      setStatusMessage({
+                        type: 'success',
+                        text: 'Changed domain to discordapp.com! Click "Save Configuration" to apply.',
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors mt-1"
+                  >
+                    Bypass Cloudflare Block (Switch to discordapp.com)
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -15,7 +15,7 @@ import {
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
@@ -39,10 +39,10 @@ const state: {
   publicBaseUrl: string;
 } = {
   discord: {
-    mode: (process.env.DISCORD_WEBHOOK_URL ? "webhook" : (process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_CHANNEL_ID ? "bot" : "webhook")) as "webhook" | "bot",
-    webhookUrl: process.env.DISCORD_WEBHOOK_URL || "",
-    botToken: process.env.DISCORD_BOT_TOKEN || "",
-    channelId: process.env.DISCORD_CHANNEL_ID || "",
+    mode: (process.env.DISCORD_WEBHOOK_URL?.trim() ? "webhook" : (process.env.DISCORD_BOT_TOKEN?.trim() && process.env.DISCORD_CHANNEL_ID?.trim() ? "bot" : "webhook")) as "webhook" | "bot",
+    webhookUrl: (process.env.DISCORD_WEBHOOK_URL || "").trim(),
+    botToken: (process.env.DISCORD_BOT_TOKEN || "").trim(),
+    channelId: (process.env.DISCORD_CHANNEL_ID || "").trim(),
     botUsername: "Tiltify Donation Bot",
     botAvatarUrl: "https://tiltify.com/favicon.ico",
     embedColor: "#00d1b2",
@@ -61,11 +61,11 @@ const state: {
     onlyNotifyPrizeAuctions: false,
   },
   tiltify: {
-    clientId: process.env.TILTIFY_CLIENT_ID || "",
-    clientSecret: process.env.TILTIFY_CLIENT_SECRET || "",
-    apiToken: process.env.TILTIFY_API_TOKEN || "",
+    clientId: (process.env.TILTIFY_CLIENT_ID || "").trim(),
+    clientSecret: (process.env.TILTIFY_CLIENT_SECRET || "").trim(),
+    apiToken: (process.env.TILTIFY_API_TOKEN || "").trim(),
     tokenExpiresAt: null,
-    campaignId: process.env.TILTIFY_CAMPAIGN_ID || "",
+    campaignId: (process.env.TILTIFY_CAMPAIGN_ID || "").trim(),
     pollIntervalSeconds: 30,
     pollingEnabled: false,
     webhookSecret: "",
@@ -558,23 +558,68 @@ async function dispatchDiscordAlert(
         }
       }
 
-      const response = await fetch(config.webhookUrl, {
+      const payload = {
+        username: config.botUsername || "Tiltify Donation Bot",
+        avatar_url: avatarUrl,
+        content: content || undefined,
+        embeds: [embed],
+        allowed_mentions: allowedMentions,
+      };
+
+      const customHeaders = {
+        "Content-Type": "application/json",
+        "User-Agent": "DiscordBot (https://tiltify.com, 1.0.0)",
+        "Accept": "application/json",
+      };
+
+      const primaryUrl = config.webhookUrl.trim();
+      let response = await fetch(primaryUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: config.botUsername || "Tiltify Donation Bot",
-          avatar_url: avatarUrl,
-          content: content || undefined,
-          embeds: [embed],
-          allowed_mentions: allowedMentions,
-        }),
+        headers: customHeaders,
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        const isCloudflare1015 =
+          errorText.includes("1015") ||
+          errorText.includes("Cloudflare") ||
+          errorText.includes("banned you temporarily");
+        const isRateLimit = response.status === 429 || response.status === 403;
+
+        // If Discord or Cloudflare rate-limited Render's shared IP on discord.com,
+        // automatically retry via discordapp.com alternate domain!
+        if (primaryUrl.includes("discord.com") && (isCloudflare1015 || isRateLimit)) {
+          const alternateUrl = primaryUrl.replace("discord.com", "discordapp.com");
+          console.warn(
+            `[Discord] Encountered status ${response.status} from discord.com (Cloudflare Error 1015 / rate limit). Retrying automatically via ${alternateUrl}...`
+          );
+          try {
+            const retryRes = await fetch(alternateUrl, {
+              method: "POST",
+              headers: customHeaders,
+              body: JSON.stringify(payload),
+            });
+
+            if (retryRes.ok) {
+              console.log("[Discord] Successfully sent webhook via discordapp.com domain!");
+              return { success: true };
+            }
+            const retryErrText = await retryRes.text();
+            console.error(`[Discord] Alternate domain also failed (${retryRes.status}):`, retryErrText);
+          } catch (retryErr: any) {
+            console.error("[Discord] Alternate domain request error:", retryErr.message);
+          }
+        }
+
+        let userFriendlyError = errorText || response.statusText;
+        if (isCloudflare1015) {
+          userFriendlyError = `Discord's Cloudflare filter temporarily blocked Render's shared IP address (Cloudflare Error 1015). In your Discord Webhook URL, change "discord.com" to "discordapp.com" (e.g. https://discordapp.com/api/webhooks/...) to bypass the block!`;
+        }
+
         return {
           success: false,
-          error: `Discord Webhook returned status ${response.status}: ${errorText || response.statusText}`,
+          error: `Discord Webhook returned status ${response.status}: ${userFriendlyError}`,
         };
       }
 
@@ -593,6 +638,7 @@ async function dispatchDiscordAlert(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "User-Agent": "DiscordBot (https://tiltify.com, 1.0.0)",
           Authorization: `Bot ${config.botToken.trim()}`,
         },
         body: JSON.stringify({
@@ -632,9 +678,13 @@ async function dispatchDiscordAlert(
           }
 
           try {
-            const fallbackRes = await fetch(config.webhookUrl, {
+            const webhookUrl = config.webhookUrl.replace("discord.com", "discordapp.com");
+            const fallbackRes = await fetch(webhookUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://tiltify.com, 1.0.0)",
+              },
               body: JSON.stringify({
                 username: config.botUsername || "Tiltify Donation Bot",
                 avatar_url: avatarUrl,
@@ -1253,6 +1303,13 @@ function restartPollingTimer() {
 
 // 1. GET /api/config: Retrieve current settings & bot status
 app.get("/api/config", (req: Request, res: Response) => {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  if (host) {
+    state.publicBaseUrl = `${protocol}://${host}`;
+    state.botStatus.serverUrl = state.publicBaseUrl;
+  }
+
   state.botStatus.discordConfigured = Boolean(
     state.discord.webhookUrl || (state.discord.botToken && state.discord.channelId)
   );
@@ -1268,7 +1325,13 @@ app.get("/api/config", (req: Request, res: Response) => {
 });
 
 // 1.5 GET /api/status: Lightweight endpoint for background polling status updates
-app.get("/api/status", (_req: Request, res: Response) => {
+app.get("/api/status", (req: Request, res: Response) => {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  if (host && !state.publicBaseUrl) {
+    state.publicBaseUrl = `${protocol}://${host}`;
+    state.botStatus.serverUrl = state.publicBaseUrl;
+  }
   res.json({
     status: state.botStatus,
   });
@@ -1477,7 +1540,16 @@ app.post("/api/discord/test", async (req: Request, res: Response) => {
     };
   }
 
+  console.log(
+    `[Discord Test] Triggered test alert! Mode: ${state.discord.mode}, Webhook URL set: ${Boolean(
+      state.discord.webhookUrl
+    )}, Bot Token set: ${Boolean(state.discord.botToken)}`
+  );
+
   const result = await dispatchDiscordAlert(testDonation, state.discord);
+  console.log(
+    `[Discord Test] Result: ${result.success ? "SUCCESS" : "FAILED - " + result.error}`
+  );
 
   testDonation.discordStatus = result.success ? "sent" : "failed";
   testDonation.discordError = result.error;
@@ -1585,9 +1657,16 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
       };
     }
 
+    console.log(
+      `[Tiltify Webhook] Received webhook event! ID: ${donationId}, Type: ${
+        isAuction ? "auction_ended" : "donation"
+      }, Amount: ${donation.amount} ${donation.currency}, Donor: ${donation.donorName}`
+    );
+
     // If duplicate check (per donation/auction id)
     const seenSet = isAuction ? state.seenAuctionIds : state.seenDonationIds;
     if (seenSet.has(donationId)) {
+      console.log(`[Tiltify Webhook] Ignored duplicate event ID: ${donationId}`);
       res.status(200).json({ status: "ignored", message: "Event already processed." });
       return;
     }
@@ -1596,6 +1675,11 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
 
     // Send Discord Alert
     const dispatchResult = await dispatchDiscordAlert(donation, state.discord);
+    console.log(
+      `[Tiltify Webhook] Discord dispatch result: ${
+        dispatchResult.success ? "SUCCESS" : "FAILED - " + dispatchResult.error
+      }`
+    );
     donation.discordStatus = dispatchResult.success ? "sent" : "failed";
     donation.discordError = dispatchResult.error;
 
