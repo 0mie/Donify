@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import {
@@ -38,6 +39,8 @@ const state: {
     updatedAt: string;
   } | null;
   publicBaseUrl: string;
+  adminPassword: string;
+  activeSessions: Set<string>;
 } = {
   discord: {
     mode: (process.env.DISCORD_WEBHOOK_URL?.trim() ? "webhook" : (process.env.DISCORD_BOT_TOKEN?.trim() && process.env.DISCORD_CHANNEL_ID?.trim() ? "bot" : "webhook")) as "webhook" | "bot",
@@ -94,6 +97,8 @@ const state: {
   pollTimer: null,
   customAvatar: null,
   publicBaseUrl: process.env.APP_URL || "",
+  adminPassword: (process.env.ADMIN_PASSWORD || "").trim(),
+  activeSessions: new Set<string>(),
 };
 
 // ---------------------------------------------------------------------
@@ -116,6 +121,7 @@ function saveConfigToDisk() {
   try {
     ensureDataDir();
     const toSave = {
+      adminPassword: state.adminPassword,
       discord: state.discord,
       tiltify: state.tiltify,
       customAvatarMeta: state.customAvatar
@@ -138,6 +144,12 @@ function loadConfigFromDisk() {
     if (fs.existsSync(CONFIG_FILE)) {
       const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
       const parsed = JSON.parse(raw);
+      if (process.env.ADMIN_PASSWORD) {
+        state.adminPassword = process.env.ADMIN_PASSWORD.trim();
+      } else if (parsed.adminPassword && typeof parsed.adminPassword === "string") {
+        state.adminPassword = parsed.adminPassword;
+      }
+
       if (parsed.discord && typeof parsed.discord === "object") {
         state.discord = {
           ...state.discord,
@@ -1388,10 +1400,114 @@ function restartPollingTimer() {
   }
 }
 
+// ---------------------------------------------------------------------
+// Admin Authentication Helpers & Routes
+// ---------------------------------------------------------------------
+function isAuthorized(req: Request): boolean {
+  if (!state.adminPassword) {
+    return true; // No passcode set: open access until user configures one
+  }
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7).trim();
+    if (state.activeSessions.has(token)) {
+      return true;
+    }
+  }
+  const customHeader = req.headers["x-admin-password"];
+  if (customHeader && String(customHeader).trim() === state.adminPassword) {
+    return true;
+  }
+  return false;
+}
+
+function requireAuth(req: Request, res: Response, next: any) {
+  if (isAuthorized(req)) {
+    return next();
+  }
+  return res.status(401).json({
+    error: "Unauthorized",
+    requiresPassword: true,
+    message: "Admin authentication required to access or modify bot configuration.",
+  });
+}
+
+// 0.1 GET /api/auth/status: Check if password is set and if current user is logged in
+app.get("/api/auth/status", (req: Request, res: Response) => {
+  res.json({
+    hasPassword: Boolean(state.adminPassword),
+    authenticated: isAuthorized(req),
+  });
+});
+
+// 0.2 POST /api/auth/login: Verify admin password
+app.post("/api/auth/login", (req: Request, res: Response) => {
+  const { password } = req.body;
+  if (!state.adminPassword) {
+    const token = crypto.randomBytes(32).toString("hex");
+    state.activeSessions.add(token);
+    return res.json({ success: true, token, message: "No password configured" });
+  }
+  if (!password || String(password).trim() !== state.adminPassword) {
+    return res.status(401).json({ success: false, error: "Incorrect admin passcode" });
+  }
+  const token = crypto.randomBytes(32).toString("hex");
+  state.activeSessions.add(token);
+  res.json({ success: true, token });
+});
+
+// 0.3 POST /api/auth/setup: Set initial password when none exists
+app.post("/api/auth/setup", (req: Request, res: Response) => {
+  const { password } = req.body;
+  if (state.adminPassword && !isAuthorized(req)) {
+    return res.status(403).json({ success: false, error: "Admin passcode is already set. Please enter current passcode." });
+  }
+  if (!password || typeof password !== "string" || password.trim().length < 4) {
+    return res.status(400).json({ success: false, error: "Passcode must be at least 4 characters long" });
+  }
+  state.adminPassword = password.trim();
+  saveConfigToDisk();
+  const token = crypto.randomBytes(32).toString("hex");
+  state.activeSessions.add(token);
+  res.json({ success: true, token, message: "Admin passcode set successfully!" });
+});
+
+// 0.4 POST /api/auth/change-password: Change admin passcode
+app.post("/api/auth/change-password", requireAuth, (req: Request, res: Response) => {
+  const { newPassword } = req.body;
+  if (!newPassword || typeof newPassword !== "string" || newPassword.trim().length < 4) {
+    return res.status(400).json({ success: false, error: "New passcode must be at least 4 characters" });
+  }
+  state.adminPassword = newPassword.trim();
+  state.activeSessions.clear();
+  const token = crypto.randomBytes(32).toString("hex");
+  state.activeSessions.add(token);
+  saveConfigToDisk();
+  res.json({ success: true, token, message: "Admin passcode updated successfully" });
+});
+
+// 0.5 POST /api/auth/remove-password: Disable passcode protection
+app.post("/api/auth/remove-password", requireAuth, (req: Request, res: Response) => {
+  state.adminPassword = "";
+  state.activeSessions.clear();
+  saveConfigToDisk();
+  res.json({ success: true, message: "Passcode protection disabled" });
+});
+
+// 0.6 POST /api/auth/logout: End current session
+app.post("/api/auth/logout", (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7).trim();
+    state.activeSessions.delete(token);
+  }
+  res.json({ success: true });
+});
+
 // --- API ROUTES ---
 
 // 1. GET /api/config: Retrieve current settings & bot status
-app.get("/api/config", (req: Request, res: Response) => {
+app.get("/api/config", requireAuth, (req: Request, res: Response) => {
   const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
   const host = req.headers["x-forwarded-host"] || req.get("host");
   if (host) {
@@ -1427,7 +1543,7 @@ app.get("/api/status", (req: Request, res: Response) => {
 });
 
 // 2. POST /api/config: Update Discord or Tiltify settings
-app.post("/api/config", (req: Request, res: Response) => {
+app.post("/api/config", requireAuth, (req: Request, res: Response) => {
   const { discord, tiltify } = req.body;
 
   if (discord) {
@@ -1475,7 +1591,7 @@ app.post("/api/config", (req: Request, res: Response) => {
 });
 
 // 2.2 POST /api/discord/avatar: Upload custom PNG/image for bot icon
-app.post("/api/discord/avatar", (req: Request, res: Response) => {
+app.post("/api/discord/avatar", requireAuth, (req: Request, res: Response) => {
   try {
     const { image, fileName } = req.body;
     if (!image || typeof image !== "string") {
@@ -1554,7 +1670,7 @@ app.get("/api/discord/tiltify-icon", (_req: Request, res: Response) => {
 });
 
 // 2.4 DELETE /api/discord/avatar: Reset bot icon back to default Tiltify icon
-app.delete("/api/discord/avatar", (req: Request, res: Response) => {
+app.delete("/api/discord/avatar", requireAuth, (req: Request, res: Response) => {
   state.customAvatar = null;
   state.discord.botAvatarUrl = "https://tiltify.com/favicon.ico";
   state.discord.customAvatarName = undefined;
@@ -1566,7 +1682,7 @@ app.delete("/api/discord/avatar", (req: Request, res: Response) => {
 });
 
 // 2.5 POST /api/tiltify/token: Generate Bearer token using Client ID & Secret
-app.post("/api/tiltify/token", async (req: Request, res: Response) => {
+app.post("/api/tiltify/token", requireAuth, async (req: Request, res: Response) => {
   const clientId = (req.body.clientId || state.tiltify.clientId || "").trim();
   const clientSecret = (req.body.clientSecret || state.tiltify.clientSecret || "").trim();
 
@@ -1607,7 +1723,7 @@ app.post("/api/tiltify/token", async (req: Request, res: Response) => {
 });
 
 // 3. POST /api/discord/test: Send a test embed to Discord
-app.post("/api/discord/test", async (req: Request, res: Response) => {
+app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) => {
   const isAuction = req.body.eventType === "auction_ended" || Boolean(req.body.auction);
 
   let testDonation: DonationRecord;
@@ -1816,7 +1932,7 @@ app.get("/api/donations", (req: Request, res: Response) => {
 });
 
 // 7. POST /api/donations/:id/resend: Resend a specific donation alert
-app.post("/api/donations/:id/resend", async (req: Request, res: Response) => {
+app.post("/api/donations/:id/resend", requireAuth, async (req: Request, res: Response) => {
   const donation = state.donations.find((d) => d.id === req.params.id);
   if (!donation) {
     res.status(404).json({ error: "Donation not found" });
@@ -1835,7 +1951,7 @@ app.post("/api/donations/:id/resend", async (req: Request, res: Response) => {
 });
 
 // 8. DELETE /api/donations: Clear history
-app.delete("/api/donations", (req: Request, res: Response) => {
+app.delete("/api/donations", requireAuth, (req: Request, res: Response) => {
   state.donations = [];
   state.seenDonationIds.clear();
   state.botStatus.totalDonationsProcessed = 0;

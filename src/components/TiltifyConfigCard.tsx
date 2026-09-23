@@ -97,9 +97,13 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
     setIsGeneratingToken(true);
     setFeedback(null);
     try {
+      const token = localStorage.getItem('tiltify_admin_token');
       const res = await fetch('/api/tiltify/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           clientId: cid,
           clientSecret: csec,

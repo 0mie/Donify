@@ -91,9 +91,13 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
         }));
 
         // Send to backend endpoint
+        const token = localStorage.getItem('tiltify_admin_token');
         const res = await fetch('/api/discord/avatar', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({
             image: dataUrl,
             fileName: file.name,
@@ -138,7 +142,11 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   const handleResetAvatar = async () => {
     setIsUploadingAvatar(true);
     try {
-      const res = await fetch('/api/discord/avatar', { method: 'DELETE' });
+      const token = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/discord/avatar', {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       const data = await res.json();
       const defaultUrl = data.avatarUrl || 'https://tiltify.com/favicon.ico';
       setLocalConfig((prev) => ({

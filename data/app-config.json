@@ -1,4 +1,5 @@
 {
+  "adminPassword": "",
   "discord": {
     "mode": "webhook",
     "webhookUrl": "https://discord.com/api/webhooks/1551832472977670146/B-udgCRQud6eO_oTPQZzQaCK9LcLVEEnAZuIBcyjqochNa9We-NgyCTfgM3Ay4BS-5HP",

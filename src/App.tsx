@@ -5,8 +5,9 @@ import { TiltifyConfigCard } from './components/TiltifyConfigCard';
 import { DonationSimulator } from './components/DonationSimulator';
 import { LiveFeed } from './components/LiveFeed';
 import { SetupGuideModal } from './components/SetupGuideModal';
+import { AdminLockModal } from './components/AdminLockModal';
 import { DiscordConfig, TiltifyConfig, DonationRecord, BotStatus, ClaimedReward, AuctionWinnerInfo } from './types';
-import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw } from 'lucide-react';
 
 const CONFIG_STORAGE_KEY = 'tiltify_bot_saved_config_v1';
 
@@ -82,10 +83,33 @@ export default function App() {
 
   const [donations, setDonations] = useState<DonationRecord[]>([]);
 
+  // Security / Admin Passcode State
+  const [hasPassword, setHasPassword] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'setup' | 'change' | null>(null);
+
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('tiltify_admin_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const authFetch = async (url: string, options: RequestInit = {}) => {
+    const headers = {
+      ...getAuthHeaders(),
+      ...(options.headers || {}),
+    };
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      setIsAuthenticated(false);
+      setAuthModalMode('login');
+    }
+    return res;
+  };
+
   // Fetch configuration and status
   const fetchConfigAndStatus = async () => {
     try {
-      const res = await fetch('/api/config');
+      const res = await authFetch('/api/config');
       if (res.ok) {
         const data = await res.json();
         let serverDiscord = data.discord || {};
@@ -118,7 +142,7 @@ export default function App() {
 
         if (needsRestoreSync) {
           try {
-            const syncRes = await fetch('/api/config', {
+            const syncRes = await authFetch('/api/config', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ discord: serverDiscord, tiltify: serverTiltify }),
@@ -172,10 +196,61 @@ export default function App() {
     }
   };
 
+  const checkAuthAndLoad = async () => {
+    try {
+      const res = await fetch('/api/auth/status', {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const authData = await res.json();
+        setHasPassword(authData.hasPassword);
+        if (authData.hasPassword && !authData.authenticated) {
+          setIsAuthenticated(false);
+          setAuthModalMode('login');
+          return;
+        }
+        setIsAuthenticated(true);
+      }
+    } catch (e) {
+      console.warn('Failed to check auth status:', e);
+    }
+    await Promise.all([fetchConfigAndStatus(), fetchDonations()]);
+  };
+
+  const handleAuthSuccess = async (newToken?: string) => {
+    if (newToken && newToken !== 'unprotected') {
+      localStorage.setItem('tiltify_admin_token', newToken);
+      setHasPassword(true);
+    } else if (newToken === '') {
+      localStorage.removeItem('tiltify_admin_token');
+      setHasPassword(false);
+    }
+    setIsAuthenticated(true);
+    setAuthModalMode(null);
+    await checkAuthAndLoad();
+  };
+
+  const handleLockDashboard = async () => {
+    const token = localStorage.getItem('tiltify_admin_token');
+    if (token) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
+    localStorage.removeItem('tiltify_admin_token');
+    setIsAuthenticated(false);
+    setAuthModalMode('login');
+  };
+
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      await Promise.all([fetchConfigAndStatus(), fetchDonations()]);
+      await checkAuthAndLoad();
       setIsLoading(false);
     };
     init();
@@ -191,7 +266,7 @@ export default function App() {
 
   // Save Discord settings
   const handleSaveDiscord = async (updated: Partial<DiscordConfig>) => {
-    const res = await fetch('/api/config', {
+    const res = await authFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ discord: updated }),
@@ -208,7 +283,7 @@ export default function App() {
 
   // Save Tiltify settings
   const handleSaveTiltify = async (updated: Partial<TiltifyConfig>) => {
-    const res = await fetch('/api/config', {
+    const res = await authFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tiltify: updated }),
@@ -226,7 +301,7 @@ export default function App() {
   // Dispatch Discord Test
   const handleTestDiscord = async (): Promise<{ success: boolean; error?: string }> => {
     try {
-      const res = await fetch('/api/discord/test', {
+      const res = await authFetch('/api/discord/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,7 +323,7 @@ export default function App() {
 
   // Trigger Manual Poll
   const handlePollNow = async () => {
-    const res = await fetch('/api/tiltify/poll', { method: 'POST' });
+    const res = await authFetch('/api/tiltify/poll', { method: 'POST' });
     const data = await res.json();
     await fetchDonations();
     await fetchConfigAndStatus();
@@ -271,7 +346,7 @@ export default function App() {
     reward?: ClaimedReward;
     auction?: AuctionWinnerInfo;
   }) => {
-    const res = await fetch('/api/discord/test', {
+    const res = await authFetch('/api/discord/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -284,7 +359,7 @@ export default function App() {
 
   // Resend Donation
   const handleResendDonation = async (id: string) => {
-    const res = await fetch(`/api/donations/${id}/resend`, { method: 'POST' });
+    const res = await authFetch(`/api/donations/${id}/resend`, { method: 'POST' });
     const data = await res.json();
     await fetchDonations();
     return { success: data.success, error: data.error };
@@ -293,7 +368,7 @@ export default function App() {
   // Clear Donations
   const handleClearDonations = async () => {
     if (confirm('Are you sure you want to clear donation history?')) {
-      await fetch('/api/donations', { method: 'DELETE' });
+      await authFetch('/api/donations', { method: 'DELETE' });
       await fetchDonations();
       await fetchConfigAndStatus();
     }
@@ -311,12 +386,39 @@ export default function App() {
       {/* Header Bar */}
       <Navbar
         status={status}
+        hasPassword={hasPassword}
         onOpenGuide={() => setGuideOpen(true)}
         onQuickTest={handleTestDiscord}
+        onSetupPasscode={() => setAuthModalMode('setup')}
+        onChangePasscode={() => setAuthModalMode('change')}
+        onLock={handleLockDashboard}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Passcode Recommendation Banner if Unprotected */}
+        {!hasPassword && (
+          <div className="bg-amber-950/30 border border-amber-800/50 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-900/60 border border-amber-700/50 flex items-center justify-center shrink-0 text-amber-400">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-semibold text-amber-200">Recommended: Set an Admin Passcode</p>
+                <p className="text-amber-300/80 mt-0.5">
+                  Your Render URL is currently open. Anyone with this link could view your Discord webhook or edit settings.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAuthModalMode('setup')}
+              className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-semibold px-3.5 py-1.5 rounded-xl shrink-0 transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <span>Set Passcode</span>
+            </button>
+          </div>
+        )}
+
         {/* Metric Cards Banner */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 shadow-sm">
@@ -472,6 +574,18 @@ export default function App() {
         isOpen={guideOpen}
         onClose={() => setGuideOpen(false)}
         webhookEndpoint={webhookEndpoint}
+      />
+
+      {/* Admin Passcode Modal (Login / Setup / Change) */}
+      <AdminLockModal
+        mode={authModalMode || (hasPassword && !isAuthenticated ? 'login' : 'setup')}
+        isOpen={Boolean(authModalMode) || (hasPassword && !isAuthenticated)}
+        onClose={() => {
+          if (authModalMode !== 'login') {
+            setAuthModalMode(null);
+          }
+        }}
+        onSuccess={handleAuthSuccess}
       />
     </div>
   );
