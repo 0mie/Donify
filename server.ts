@@ -39,7 +39,7 @@ const state: {
   publicBaseUrl: string;
 } = {
   discord: {
-    mode: (process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_CHANNEL_ID ? "bot" : "webhook") as "webhook" | "bot",
+    mode: (process.env.DISCORD_WEBHOOK_URL ? "webhook" : (process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_CHANNEL_ID ? "bot" : "webhook")) as "webhook" | "bot",
     webhookUrl: process.env.DISCORD_WEBHOOK_URL || "",
     botToken: process.env.DISCORD_BOT_TOKEN || "",
     channelId: process.env.DISCORD_CHANNEL_ID || "",
@@ -214,7 +214,7 @@ function hexToDiscordColor(hex: string): number {
 async function dispatchDiscordAlert(
   donation: DonationRecord,
   config: DiscordConfig
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
     let mentionText = "";
     const allowedMentions: {
@@ -604,9 +604,69 @@ async function dispatchDiscordAlert(
 
       if (!response.ok) {
         const errorText = await response.text();
+
+        // If Discord Bot API fails because the channel is unknown or bot lacks access,
+        // and a valid webhookUrl is available, fall back to the webhook to ensure alerts never fail!
+        if (
+          config.webhookUrl &&
+          (response.status === 404 ||
+            response.status === 403 ||
+            errorText.includes("10003") ||
+            errorText.includes("50001"))
+        ) {
+          console.warn(
+            `[Discord] Bot API failed for channel ${config.channelId} (${response.status}: ${errorText}). Attempting fallback to Webhook URL...`
+          );
+
+          let avatarUrl = config.botAvatarUrl || "https://tiltify.com/favicon.ico";
+          if (avatarUrl.startsWith("/")) {
+            if (state.publicBaseUrl) {
+              avatarUrl = `${state.publicBaseUrl}${avatarUrl}`;
+            }
+          } else if (avatarUrl.startsWith("data:")) {
+            if (state.publicBaseUrl && state.customAvatar) {
+              avatarUrl = `${state.publicBaseUrl}/api/discord/avatar`;
+            } else {
+              avatarUrl = "https://tiltify.com/favicon.ico";
+            }
+          }
+
+          try {
+            const fallbackRes = await fetch(config.webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                username: config.botUsername || "Tiltify Donation Bot",
+                avatar_url: avatarUrl,
+                content: content || undefined,
+                embeds: [embed],
+                allowed_mentions: allowedMentions,
+              }),
+            });
+
+            if (fallbackRes.ok) {
+              return {
+                success: true,
+                warning:
+                  "Delivered via Webhook fallback (Bot Token lacked access to that channel ID). Please switch to 'Webhook' mode in settings.",
+              };
+            }
+          } catch (fallbackErr: any) {
+            console.error("[Discord] Webhook fallback also failed:", fallbackErr.message);
+          }
+        }
+
+        let hint = "";
+        if (errorText.includes("10003") || response.status === 404) {
+          hint =
+            " Reason: 'Unknown Channel' (code 10003). The bot has not been added to that Discord server, or lacks 'View Channel' / 'Send Messages' permissions for that channel ID. Switch to 'Webhook (Recommended)' mode above to use your Webhook URL instead.";
+        } else if (errorText.includes("50001") || response.status === 403) {
+          hint = " Reason: 'Missing Access' (code 50001). The bot lacks permission to post in that channel.";
+        }
+
         return {
           success: false,
-          error: `Discord Bot API returned status ${response.status}: ${errorText || response.statusText}`,
+          error: `Discord Bot API returned status ${response.status}: ${errorText || response.statusText}.${hint}`,
         };
       }
 
@@ -1207,6 +1267,13 @@ app.get("/api/config", (req: Request, res: Response) => {
   });
 });
 
+// 1.5 GET /api/status: Lightweight endpoint for background polling status updates
+app.get("/api/status", (_req: Request, res: Response) => {
+  res.json({
+    status: state.botStatus,
+  });
+});
+
 // 2. POST /api/config: Update Discord or Tiltify settings
 app.post("/api/config", (req: Request, res: Response) => {
   const { discord, tiltify } = req.body;
@@ -1424,9 +1491,12 @@ app.post("/api/discord/test", async (req: Request, res: Response) => {
   if (result.success) {
     res.json({
       success: true,
-      message: isAuction
-        ? "Auction winner alert dispatched to Discord successfully!"
-        : "Test alert dispatched to Discord successfully!",
+      message:
+        result.warning ||
+        (isAuction
+          ? "Auction winner alert dispatched to Discord successfully!"
+          : "Test alert dispatched to Discord successfully!"),
+      warning: result.warning,
     });
   } else {
     res.status(400).json({ success: false, error: result.error });

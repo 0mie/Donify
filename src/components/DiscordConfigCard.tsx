@@ -43,6 +43,7 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Avatar Management State
   const [avatarMode, setAvatarMode] = useState<'upload' | 'url'>('upload');
@@ -51,10 +52,14 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setLocalConfig(config);
-  }, [config]);
+    // Only update localConfig when config changes externally and user has not typed unsaved edits
+    if (!isDirty) {
+      setLocalConfig(config);
+    }
+  }, [config, isDirty]);
 
   const handleInputChange = (field: keyof DiscordConfig, value: any) => {
+    setIsDirty(true);
     setLocalConfig((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -177,6 +182,7 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
     setStatusMessage(null);
     try {
       await onSave(localConfig);
+      setIsDirty(false);
       setStatusMessage({ type: 'success', text: 'Discord settings saved successfully!' });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Failed to save Discord settings.' });
@@ -260,7 +266,24 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
               ) : (
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
               )}
-              <div className="flex-1 font-medium">{statusMessage.text}</div>
+              <div className="flex-1 font-medium space-y-1.5">
+                <div>{statusMessage.text}</div>
+                {localConfig.mode === 'bot' && localConfig.webhookUrl && (statusMessage.text.includes('10003') || statusMessage.text.includes('Unknown Channel')) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleInputChange('mode', 'webhook');
+                      setStatusMessage({
+                        type: 'success',
+                        text: 'Switched to Webhook mode! Click "Save Configuration" or "Send Live Discord Test" to send directly.',
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors mt-1"
+                  >
+                    Switch to Webhook (Recommended)
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

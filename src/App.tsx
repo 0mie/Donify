@@ -78,6 +78,19 @@ export default function App() {
     }
   };
 
+  // Fetch live polling status only (without touching active form configurations)
+  const fetchStatusOnly = async () => {
+    try {
+      const res = await fetch('/api/status');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status) setStatus(data.status);
+      }
+    } catch (err) {
+      console.error('Failed to load status:', err);
+    }
+  };
+
   // Fetch donations history
   const fetchDonations = async () => {
     try {
@@ -99,9 +112,9 @@ export default function App() {
     };
     init();
 
-    // Periodic refresh
+    // Periodic refresh for background activity & feed (does NOT overwrite user edits)
     const interval = setInterval(() => {
-      fetchConfigAndStatus();
+      fetchStatusOnly();
       fetchDonations();
     }, 8000);
 

@@ -44,10 +44,13 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    setLocalConfig(config);
-  }, [config]);
+    if (!isDirty) {
+      setLocalConfig(config);
+    }
+  }, [config, isDirty]);
 
   const webhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/tiltify/webhook`
@@ -60,6 +63,7 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
   };
 
   const handleInputChange = (field: keyof TiltifyConfig, value: any) => {
+    setIsDirty(true);
     setLocalConfig((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -69,6 +73,7 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
     setFeedback(null);
     try {
       await onSave(localConfig);
+      setIsDirty(false);
       setFeedback({ type: 'success', text: 'Tiltify configuration updated successfully.' });
     } catch (err: any) {
       setFeedback({ type: 'error', text: err.message || 'Failed to save configuration.' });
