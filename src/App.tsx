@@ -8,6 +8,25 @@ import { SetupGuideModal } from './components/SetupGuideModal';
 import { DiscordConfig, TiltifyConfig, DonationRecord, BotStatus, ClaimedReward, AuctionWinnerInfo } from './types';
 import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
 
+const CONFIG_STORAGE_KEY = 'tiltify_bot_saved_config_v1';
+
+function saveLocalConfigBackup(discord: DiscordConfig, tiltify: TiltifyConfig) {
+  try {
+    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify({ discord, tiltify }));
+  } catch (e) {
+    // Ignore storage quota/permission issues
+  }
+}
+
+function getLocalConfigBackup(): { discord?: Partial<DiscordConfig>; tiltify?: Partial<TiltifyConfig> } | null {
+  try {
+    const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'feed' | 'simulator'>('discord');
   const [guideOpen, setGuideOpen] = useState(false);
@@ -69,9 +88,58 @@ export default function App() {
       const res = await fetch('/api/config');
       if (res.ok) {
         const data = await res.json();
-        if (data.discord) setDiscordConfig(data.discord);
-        if (data.tiltify) setTiltifyConfig(data.tiltify);
+        let serverDiscord = data.discord || {};
+        let serverTiltify = data.tiltify || {};
+
+        // Auto-Restore Protection:
+        // If the server was freshly redeployed or restarted with blank values,
+        // recover the user's previously saved preferences from browser backup!
+        const backup = getLocalConfigBackup();
+        let needsRestoreSync = false;
+
+        if (backup) {
+          if (
+            !serverDiscord.webhookUrl &&
+            !serverDiscord.botToken &&
+            (backup.discord?.webhookUrl || backup.discord?.botToken)
+          ) {
+            serverDiscord = { ...serverDiscord, ...backup.discord };
+            needsRestoreSync = true;
+          }
+          if (
+            !serverTiltify.campaignId &&
+            !serverTiltify.clientId &&
+            backup.tiltify?.campaignId
+          ) {
+            serverTiltify = { ...serverTiltify, ...backup.tiltify };
+            needsRestoreSync = true;
+          }
+        }
+
+        if (needsRestoreSync) {
+          try {
+            const syncRes = await fetch('/api/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ discord: serverDiscord, tiltify: serverTiltify }),
+            });
+            if (syncRes.ok) {
+              const syncData = await syncRes.json();
+              if (syncData.discord) serverDiscord = syncData.discord;
+              if (syncData.tiltify) serverTiltify = syncData.tiltify;
+              if (syncData.status) setStatus(syncData.status);
+            }
+          } catch (syncErr) {
+            console.warn('[App] Failed to auto-sync restored backup to server:', syncErr);
+          }
+        }
+
+        setDiscordConfig(serverDiscord);
+        setTiltifyConfig(serverTiltify);
         if (data.status) setStatus(data.status);
+
+        // Keep local backup up to date
+        saveLocalConfigBackup(serverDiscord, serverTiltify);
       }
     } catch (err) {
       console.error('Failed to load server config:', err);
@@ -135,6 +203,7 @@ export default function App() {
     const data = await res.json();
     setDiscordConfig(data.discord);
     setStatus(data.status);
+    saveLocalConfigBackup(data.discord, tiltifyConfig);
   };
 
   // Save Tiltify settings
@@ -151,6 +220,7 @@ export default function App() {
     const data = await res.json();
     setTiltifyConfig(data.tiltify);
     setStatus(data.status);
+    saveLocalConfigBackup(discordConfig, data.tiltify);
   };
 
   // Dispatch Discord Test

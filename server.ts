@@ -96,6 +96,78 @@ const state: {
   publicBaseUrl: process.env.APP_URL || "",
 };
 
+// ---------------------------------------------------------------------
+// Configuration Persistence (data/app-config.json)
+// ---------------------------------------------------------------------
+const DATA_DIR = path.join(process.cwd(), "data");
+const CONFIG_FILE = path.join(DATA_DIR, "app-config.json");
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    } catch (e) {
+      console.warn("Could not create data directory:", e);
+    }
+  }
+}
+
+function saveConfigToDisk() {
+  try {
+    ensureDataDir();
+    const toSave = {
+      discord: state.discord,
+      tiltify: state.tiltify,
+      customAvatarMeta: state.customAvatar
+        ? {
+            contentType: state.customAvatar.contentType,
+            fileName: state.customAvatar.fileName,
+            updatedAt: state.customAvatar.updatedAt,
+          }
+        : null,
+    };
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(toSave, null, 2), "utf-8");
+    console.log("[Config Persistence] Saved configuration to data/app-config.json");
+  } catch (err: any) {
+    console.error("[Config Persistence] Failed to save config to disk:", err.message);
+  }
+}
+
+function loadConfigFromDisk() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed.discord && typeof parsed.discord === "object") {
+        state.discord = {
+          ...state.discord,
+          ...parsed.discord,
+        };
+      }
+      if (parsed.tiltify && typeof parsed.tiltify === "object") {
+        state.tiltify = {
+          ...state.tiltify,
+          ...parsed.tiltify,
+        };
+      }
+      state.botStatus.discordConfigured = Boolean(
+        state.discord.webhookUrl || (state.discord.botToken && state.discord.channelId)
+      );
+      state.botStatus.tiltifyConfigured = Boolean(
+        state.tiltify.campaignId ||
+          state.tiltify.apiToken ||
+          (state.tiltify.clientId && state.tiltify.clientSecret)
+      );
+      console.log("[Config Persistence] Successfully restored configuration from data/app-config.json");
+    }
+  } catch (err: any) {
+    console.warn("[Config Persistence] Could not load saved config from disk:", err.message);
+  }
+}
+
+// Load persisted configuration immediately at startup
+loadConfigFromDisk();
+
 // Middleware: dynamically track public base URL from incoming requests
 app.use((req: Request, _res: Response, next) => {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -285,10 +357,7 @@ async function dispatchDiscordAlert(
       embedTitle = `🏆 AUCTION HOUSE: Auction Ended & Finalized!`;
       embedDescription = `**${auction.winnerName || donation.donorName}** won **${auction.itemTitle}** with a winning bid of **${formattedAmount}**!`;
       embedColor = hexToDiscordColor(config.auctionEmbedColor || "#F59E0B");
-      const timeStr = new Date(donation.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      embedFooterText = config.auctionFooterText?.trim()
-        ? `${config.auctionFooterText.trim()} • ${timeStr}`
-        : `Tiltify Auction House • Winner Fulfillment • ${timeStr}`;
+      embedFooterText = config.auctionFooterText?.trim() || "Tiltify Auction House • Winner Fulfillment";
 
       // 1. Winning Bid & Winner
       embedFields.push(
@@ -410,10 +479,7 @@ async function dispatchDiscordAlert(
       embedTitle = `🎉 New Donation: ${formattedAmount}!`;
       embedDescription = `**${donation.donorName || "An anonymous donor"}** contributed to the campaign!`;
       embedColor = hexToDiscordColor(config.embedColor);
-      const timeStr = new Date(donation.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      embedFooterText = config.footerText?.trim()
-        ? `${config.footerText.trim()} • ${timeStr}`
-        : `Tiltify Donation Alerts • ${timeStr}`;
+      embedFooterText = config.footerText?.trim() || "Tiltify Donation Alerts";
 
       embedFields.push(
         {
@@ -1396,6 +1462,9 @@ app.post("/api/config", (req: Request, res: Response) => {
   state.botStatus.tiltifyConfigured = Boolean(
     state.tiltify.campaignId || state.tiltify.apiToken || (state.tiltify.clientId && state.tiltify.clientSecret)
   );
+
+  // Persist updated configuration to disk
+  saveConfigToDisk();
 
   res.json({
     success: true,

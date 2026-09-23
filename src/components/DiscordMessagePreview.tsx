@@ -441,7 +441,7 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
               <span>
                 {isAuction
                   ? (config.auctionFooterText?.trim() || 'Tiltify Auction House • Winner Fulfillment')
-                  : (config.footerText?.trim() || 'Tiltify Donation Alerts')} • 12:00 PM
+                  : (config.footerText?.trim() || 'Tiltify Donation Alerts')} • Today at 12:00 PM
               </span>
             </div>
           </div>
