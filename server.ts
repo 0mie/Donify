@@ -1529,6 +1529,14 @@ app.get("/api/config", requireAuth, (req: Request, res: Response) => {
   });
 });
 
+// Health check endpoint for uptime monitors / keep-alive pings (cron-job.org, UptimeRobot, Render)
+app.get("/health", (_req: Request, res: Response) => {
+  res.status(200).send("OK");
+});
+app.head("/", (_req: Request, res: Response) => {
+  res.status(200).end();
+});
+
 // 1.5 GET /api/status: Lightweight endpoint for background polling status updates
 app.get("/api/status", (req: Request, res: Response) => {
   const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
