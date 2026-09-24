@@ -69,7 +69,9 @@ export interface DiscordConfig {
   embedTitleTemplate?: string;
   embedDescriptionTemplate?: string;
   embedThumbnailUrl?: string;
+  customThumbnailName?: string;
   embedBannerUrl?: string;
+  customBannerName?: string;
   showEmbedTimestamp?: boolean;
   progressBarCharStyle?: ProgressBarCharStyle;
   auctionTitleTemplate?: string;
@@ -81,6 +83,7 @@ export interface TiltifyConfig {
   apiToken: string;
   tokenExpiresAt?: number | null;
   campaignId: string;
+  campaignName?: string;
   pollIntervalSeconds: number;
   pollingEnabled: boolean;
   webhookSecret: string;

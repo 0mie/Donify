@@ -45,6 +45,13 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [isFetchingCampaign, setIsFetchingCampaign] = useState(false);
+  const [fetchedCampaignMeta, setFetchedCampaignMeta] = useState<{
+    name: string;
+    totalRaised?: number;
+    targetGoal?: number;
+    currency?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!isDirty) {
@@ -149,6 +156,67 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
     navigator.clipboard.writeText(curlSnippet);
     setCopiedCurl(true);
     setTimeout(() => setCopiedCurl(false), 2000);
+  };
+
+  const handleFetchCampaignInfo = async () => {
+    const cid = localConfig.campaignId?.trim();
+    if (!cid) {
+      setFeedback({
+        type: 'error',
+        text: 'Please enter a Tiltify Campaign ID, Slug, or URL first.',
+      });
+      return;
+    }
+
+    setIsFetchingCampaign(true);
+    setFeedback(null);
+    try {
+      const token = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/tiltify/fetch-campaign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          campaignId: cid,
+          apiToken: localConfig.apiToken,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.campaign) {
+        throw new Error(data.error || 'Could not retrieve campaign details from Tiltify.');
+      }
+
+      const camp = data.campaign;
+      setFetchedCampaignMeta({
+        name: camp.name,
+        totalRaised: camp.totalRaised,
+        targetGoal: camp.targetGoal,
+        currency: camp.currency,
+      });
+
+      // Update localConfig.campaignName with real name from Tiltify API
+      const updated = {
+        ...localConfig,
+        campaignName: camp.name,
+      };
+      setLocalConfig(updated);
+      setIsDirty(true);
+
+      setFeedback({
+        type: 'success',
+        text: `Connected to "${camp.name}"! Campaign display name updated. Click Save Settings to persist.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err.message || 'Failed to fetch campaign details from Tiltify API.',
+      });
+    } finally {
+      setIsFetchingCampaign(false);
+    }
   };
 
   const handleTogglePolling = async () => {
@@ -297,22 +365,75 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              {/* Campaign ID */}
+              {/* Campaign ID or Slug */}
               <div>
-                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block mb-1">
-                  Tiltify Campaign ID or Slug <span className="text-rose-400">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block">
+                    Tiltify Campaign ID, Slug, or URL <span className="text-rose-400">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleFetchCampaignInfo}
+                    disabled={isFetchingCampaign || !localConfig.campaignId}
+                    className="flex items-center gap-1.5 text-[11px] text-teal-400 hover:text-teal-300 disabled:opacity-40 transition-colors font-medium"
+                    title="Query Tiltify API for the official campaign title and live progress"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${isFetchingCampaign ? 'animate-spin' : ''}`} />
+                    <span>{isFetchingCampaign ? 'Querying API...' : 'Fetch Name from Tiltify'}</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={localConfig.campaignId}
                   onChange={(e) => handleInputChange('campaignId', e.target.value)}
-                  placeholder="e.g. 123456 or marathon-charity-2026"
+                  placeholder="e.g. 123456, marathon-charity-2026, or https://tiltify.com/@user/marathon"
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                   required
                 />
                 <p className="text-[11px] text-neutral-400 mt-1">
-                  Found in your campaign URL or dashboard.
+                  Paste your numeric campaign ID, vanity slug, or complete Tiltify URL.
                 </p>
+              </div>
+
+              {/* Campaign Display Name (Custom Name or Pulled from API) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block">
+                    Campaign Display Name (Discord Title)
+                  </label>
+                  <span className="text-[10px] text-teal-300 bg-teal-950/80 border border-teal-800/80 px-1.5 py-0.5 rounded">
+                    Customizable
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={localConfig.campaignName || ''}
+                  onChange={(e) => handleInputChange('campaignName', e.target.value)}
+                  placeholder="e.g. Charity Gaming Marathon 2026 (or auto-pulled from API)"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <p className="text-[11px] text-neutral-400 mt-1">
+                  Used in Discord notifications and the <code className="text-teal-400 bg-neutral-900 px-1 py-0.5 rounded font-mono text-[10px]">{"{campaign}"}</code> template variable. You can enter any custom name here, or click <strong>Fetch Name from Tiltify</strong> above to automatically use the official title.
+                </p>
+
+                {fetchedCampaignMeta && (
+                  <div className="mt-2.5 p-3 bg-teal-950/30 border border-teal-800/60 rounded-xl text-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+                      <div>
+                        <div className="font-semibold text-white">{fetchedCampaignMeta.name}</div>
+                        {fetchedCampaignMeta.targetGoal !== undefined && (
+                          <div className="text-[11px] text-teal-300/80">
+                            Raised: ${(fetchedCampaignMeta.totalRaised || 0).toLocaleString()} • Goal: ${fetchedCampaignMeta.targetGoal.toLocaleString()} {fetchedCampaignMeta.currency || 'USD'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-teal-900/60 text-teal-300 border border-teal-700/50 px-2 py-0.5 rounded font-mono shrink-0">
+                      Tiltify API Verified
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Tiltify OAuth2 Credentials (Client ID & Client Secret) */}

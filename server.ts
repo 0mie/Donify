@@ -38,6 +38,18 @@ const state: {
     fileName: string;
     updatedAt: string;
   } | null;
+  customThumbnail: {
+    buffer: Buffer;
+    contentType: string;
+    fileName: string;
+    updatedAt: string;
+  } | null;
+  customBanner: {
+    buffer: Buffer;
+    contentType: string;
+    fileName: string;
+    updatedAt: string;
+  } | null;
   publicBaseUrl: string;
   adminPassword: string;
   activeSessions: Set<string>;
@@ -75,6 +87,7 @@ const state: {
     apiToken: (process.env.TILTIFY_API_TOKEN || "").trim(),
     tokenExpiresAt: null,
     campaignId: (process.env.TILTIFY_CAMPAIGN_ID || "").trim(),
+    campaignName: (process.env.TILTIFY_CAMPAIGN_NAME || "").trim(),
     pollIntervalSeconds: 30,
     pollingEnabled: false,
     webhookSecret: "",
@@ -98,6 +111,8 @@ const state: {
   },
   pollTimer: null,
   customAvatar: null,
+  customThumbnail: null,
+  customBanner: null,
   publicBaseUrl: process.env.APP_URL || "",
   adminPassword: (process.env.ADMIN_PASSWORD || "").trim(),
   activeSessions: new Set<string>(),
@@ -133,9 +148,34 @@ function saveConfigToDisk() {
             updatedAt: state.customAvatar.updatedAt,
           }
         : null,
+      customThumbnailMeta: state.customThumbnail
+        ? {
+            contentType: state.customThumbnail.contentType,
+            fileName: state.customThumbnail.fileName,
+            updatedAt: state.customThumbnail.updatedAt,
+          }
+        : null,
+      customBannerMeta: state.customBanner
+        ? {
+            contentType: state.customBanner.contentType,
+            fileName: state.customBanner.fileName,
+            updatedAt: state.customBanner.updatedAt,
+          }
+        : null,
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(toSave, null, 2), "utf-8");
-    console.log("[Config Persistence] Saved configuration to data/app-config.json");
+
+    if (state.customAvatar?.buffer) {
+      fs.writeFileSync(path.join(DATA_DIR, "custom-avatar.bin"), state.customAvatar.buffer);
+    }
+    if (state.customThumbnail?.buffer) {
+      fs.writeFileSync(path.join(DATA_DIR, "custom-thumbnail.bin"), state.customThumbnail.buffer);
+    }
+    if (state.customBanner?.buffer) {
+      fs.writeFileSync(path.join(DATA_DIR, "custom-banner.bin"), state.customBanner.buffer);
+    }
+
+    console.log("[Config Persistence] Saved configuration and assets to data/");
   } catch (err: any) {
     console.error("[Config Persistence] Failed to save config to disk:", err.message);
   }
@@ -164,6 +204,33 @@ function loadConfigFromDisk() {
           ...parsed.tiltify,
         };
       }
+
+      // Restore custom images from disk binaries
+      if (parsed.customAvatarMeta && fs.existsSync(path.join(DATA_DIR, "custom-avatar.bin"))) {
+        state.customAvatar = {
+          buffer: fs.readFileSync(path.join(DATA_DIR, "custom-avatar.bin")),
+          contentType: parsed.customAvatarMeta.contentType,
+          fileName: parsed.customAvatarMeta.fileName,
+          updatedAt: parsed.customAvatarMeta.updatedAt,
+        };
+      }
+      if (parsed.customThumbnailMeta && fs.existsSync(path.join(DATA_DIR, "custom-thumbnail.bin"))) {
+        state.customThumbnail = {
+          buffer: fs.readFileSync(path.join(DATA_DIR, "custom-thumbnail.bin")),
+          contentType: parsed.customThumbnailMeta.contentType,
+          fileName: parsed.customThumbnailMeta.fileName,
+          updatedAt: parsed.customThumbnailMeta.updatedAt,
+        };
+      }
+      if (parsed.customBannerMeta && fs.existsSync(path.join(DATA_DIR, "custom-banner.bin"))) {
+        state.customBanner = {
+          buffer: fs.readFileSync(path.join(DATA_DIR, "custom-banner.bin")),
+          contentType: parsed.customBannerMeta.contentType,
+          fileName: parsed.customBannerMeta.fileName,
+          updatedAt: parsed.customBannerMeta.updatedAt,
+        };
+      }
+
       state.botStatus.discordConfigured = Boolean(
         state.discord.webhookUrl || (state.discord.botToken && state.discord.channelId)
       );
@@ -581,61 +648,103 @@ async function dispatchDiscordAlert(
       embedColor = hexToDiscordColor(config.embedColor);
       embedFooterText = config.footerText?.trim() || "Tiltify Donation Alerts";
 
-      embedFields.push(
-        {
-          name: "👤 Donor",
-          value: `**${donation.donorName || "Anonymous"}**`,
-          inline: true,
-        },
-        {
-          name: "💰 Amount",
-          value: `**${formattedAmount}**`,
-          inline: true,
-        }
-      );
+      const layout = config.embedLayout || "modern";
 
-      if (config.includeCampaignDetails && (donation.campaignName || donation.causeName)) {
-        const details: string[] = [];
-        if (donation.campaignName) details.push(`**${donation.campaignName}**`);
-        if (donation.causeName) details.push(`*${donation.causeName}*`);
-        embedFields.push({
-          name: "🎯 Campaign",
-          value: details.join(" • "),
-          inline: true,
-        });
-      }
+      if (layout === "compact") {
+        // COMPACT LAYOUT: Streamlined, high-density presentation for active streams
+        // Combines Donor, Amount, and Campaign into concise single-line/stacked stats without extra empty rows
+        const statsLine = [
+          `**Donor:** ${donation.donorName || "Anonymous"}`,
+          `**Amount:** ${formattedAmount}`,
+          ...(config.includeCampaignDetails && donation.campaignName ? [`**Campaign:** ${donation.campaignName}`] : []),
+        ].join("  •  ");
 
-      if (config.includeComment && donation.comment) {
         embedFields.push({
-          name: "💬 Message",
-          value: `> ${donation.comment}`,
+          name: "⚡ Donation Summary",
+          value: statsLine,
           inline: false,
         });
-      }
 
-      // Campaign Progress & Total Raised
-      if (
-        config.includeCampaignProgress !== false &&
-        donation.totalRaised !== undefined &&
-        config.embedLayout !== "minimal"
-      ) {
-        let progressVal = "";
-        if (donation.targetGoal && donation.targetGoal > 0) {
-          const bar = generateProgressBar(
-            donation.totalRaised,
-            donation.targetGoal,
-            10,
-            config.progressBarCharStyle
-          );
-          progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** raised of **${formatCurrency(donation.targetGoal, donation.currency)}** goal\n${bar}`;
-        } else {
-          progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** total raised so far!`;
+        if (config.includeComment && donation.comment) {
+          embedFields.push({
+            name: "💬 Message",
+            value: `> *"${donation.comment}"*`,
+            inline: false,
+          });
         }
-        embedFields.push({
-          name: "🏆 Campaign Total Raised",
-          value: progressVal,
-          inline: false,
-        });
+
+        if (config.includeCampaignProgress !== false && donation.totalRaised !== undefined) {
+          let progressVal = "";
+          if (donation.targetGoal && donation.targetGoal > 0) {
+            const pct = Math.min(100, Math.round((donation.totalRaised / donation.targetGoal) * 1000) / 10);
+            progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** / **${formatCurrency(donation.targetGoal, donation.currency)}** (${pct}%)`;
+          } else {
+            progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** raised`;
+          }
+          embedFields.push({
+            name: "🏆 Progress",
+            value: progressVal,
+            inline: true,
+          });
+        }
+      } else {
+        // MODERN & MINIMAL LAYOUTS
+        embedFields.push(
+          {
+            name: "👤 Donor",
+            value: `**${donation.donorName || "Anonymous"}**`,
+            inline: true,
+          },
+          {
+            name: "💰 Amount",
+            value: `**${formattedAmount}**`,
+            inline: true,
+          }
+        );
+
+        if (config.includeCampaignDetails && (donation.campaignName || donation.causeName)) {
+          const details: string[] = [];
+          if (donation.campaignName) details.push(`**${donation.campaignName}**`);
+          if (donation.causeName) details.push(`*${donation.causeName}*`);
+          embedFields.push({
+            name: "🎯 Campaign",
+            value: details.join(" • "),
+            inline: true,
+          });
+        }
+
+        if (config.includeComment && donation.comment) {
+          embedFields.push({
+            name: "💬 Message",
+            value: `> ${donation.comment}`,
+            inline: false,
+          });
+        }
+
+        // Campaign Progress & Total Raised (Full graphical progress bar in Modern layout)
+        if (
+          config.includeCampaignProgress !== false &&
+          donation.totalRaised !== undefined &&
+          layout !== "minimal"
+        ) {
+          let progressVal = "";
+          if (donation.targetGoal && donation.targetGoal > 0) {
+            const bar = generateProgressBar(
+              donation.totalRaised,
+              donation.targetGoal,
+              10,
+              config.progressBarCharStyle
+            );
+            progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** raised of **${formatCurrency(donation.targetGoal, donation.currency)}** goal\n${bar}`;
+          } else {
+            progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** total raised so far!`;
+          }
+          embedFields.push({
+            name: "🏆 Campaign Total Raised",
+            value: progressVal,
+            inline: false,
+          });
+        }
       }
 
       // 🎁 Claimed Reward Field
@@ -806,11 +915,27 @@ async function dispatchDiscordAlert(
     }
 
     if (config.embedThumbnailUrl?.trim()) {
-      embed.thumbnail = { url: config.embedThumbnailUrl.trim() };
+      let thumbUrl = config.embedThumbnailUrl.trim();
+      if (thumbUrl.startsWith("/")) {
+        if (state.publicBaseUrl) thumbUrl = `${state.publicBaseUrl}${thumbUrl}`;
+      } else if (thumbUrl.startsWith("data:")) {
+        if (state.publicBaseUrl && state.customThumbnail) {
+          thumbUrl = `${state.publicBaseUrl}/api/discord/thumbnail`;
+        }
+      }
+      embed.thumbnail = { url: thumbUrl };
     }
 
     if (config.embedBannerUrl?.trim()) {
-      embed.image = { url: config.embedBannerUrl.trim() };
+      let bannerUrl = config.embedBannerUrl.trim();
+      if (bannerUrl.startsWith("/")) {
+        if (state.publicBaseUrl) bannerUrl = `${state.publicBaseUrl}${bannerUrl}`;
+      } else if (bannerUrl.startsWith("data:")) {
+        if (state.publicBaseUrl && state.customBanner) {
+          bannerUrl = `${state.publicBaseUrl}/api/discord/banner`;
+        }
+      }
+      embed.image = { url: bannerUrl };
     }
 
     if (config.mode === "webhook") {
@@ -1082,9 +1207,27 @@ async function refreshCampaignRewards(campaignId: string): Promise<void> {
   }
 }
 
+function cleanCampaignIdentifier(raw: string): string {
+  let cleaned = (raw || "").trim();
+  if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+    try {
+      const parsedUrl = new URL(cleaned);
+      const segments = parsedUrl.pathname.split("/").filter(Boolean);
+      if (segments.length > 0) {
+        cleaned = segments[segments.length - 1].replace(/^\+/, "");
+      }
+    } catch {
+      // Keep original trimmed string if URL parsing fails
+    }
+  }
+  return cleaned;
+}
+
 interface CampaignSummary {
   id: string;
   name?: string;
+  campaignName?: string;
+  slug?: string;
   totalRaised?: number;
   targetGoal?: number;
   currency?: string;
@@ -1093,72 +1236,103 @@ interface CampaignSummary {
 let cachedCampaignSummary: CampaignSummary | null = null;
 
 // Helper to query Tiltify v5 API for campaign total amount raised & goal progress
-async function fetchLiveCampaignSummary(campaignId?: string): Promise<{
+async function fetchLiveCampaignSummary(
+  campaignId?: string,
+  forceRefresh = false
+): Promise<{
+  id?: string;
   totalRaised?: number;
   targetGoal?: number;
   campaignName?: string;
+  name?: string;
+  slug?: string;
   currency?: string;
 } | null> {
-  const cid = (campaignId || state.tiltify.campaignId || "").trim();
+  const rawId = (campaignId || state.tiltify.campaignId || "").trim();
+  const cid = cleanCampaignIdentifier(rawId);
   if (!cid) {
-    if (state.botStatus.totalAmountProcessed > 0) {
-      return { totalRaised: state.botStatus.totalAmountProcessed };
+    if (state.botStatus.totalAmountProcessed > 0 || state.tiltify.campaignName) {
+      return {
+        totalRaised: state.botStatus.totalAmountProcessed,
+        campaignName: state.tiltify.campaignName?.trim() || undefined,
+        name: state.tiltify.campaignName?.trim() || undefined,
+      };
     }
     return null;
   }
 
   if (
+    !forceRefresh &&
     cachedCampaignSummary &&
     cachedCampaignSummary.id === cid &&
     Date.now() - cachedCampaignSummary.fetchedAt < 10000
   ) {
-    return cachedCampaignSummary;
-  }
-
-  // Tiltify v5 campaign endpoint
-  try {
-    const url = `https://v5api.tiltify.com/api/public/campaigns/${encodeURIComponent(cid)}`;
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (state.tiltify.apiToken) {
-      headers["Authorization"] = `Bearer ${state.tiltify.apiToken.trim()}`;
-    }
-
-    const res = await fetch(url, { headers });
-    if (res.ok) {
-      const data = await res.json();
-      const camp = data.data || data;
-      const raisedVal =
-        camp.amount_raised?.value ??
-        camp.total_amount_raised?.value ??
-        camp.amount_raised ??
-        camp.total_amount_raised;
-      const goalVal = camp.goal?.value ?? camp.goal;
-      const currency = camp.amount_raised?.currency ?? camp.goal?.currency ?? "USD";
-      const totalRaised = typeof raisedVal === "number" ? raisedVal : parseFloat(raisedVal);
-      const targetGoal = typeof goalVal === "number" ? goalVal : parseFloat(goalVal);
-
-      cachedCampaignSummary = {
-        id: cid,
-        name: camp.name || camp.slug,
-        totalRaised: !isNaN(totalRaised) ? totalRaised : undefined,
-        targetGoal: !isNaN(targetGoal) ? targetGoal : undefined,
-        currency,
-        fetchedAt: Date.now(),
-      };
-      return cachedCampaignSummary;
-    }
-  } catch (err) {
-    // Ignore error silently
-  }
-
-  if (state.botStatus.totalAmountProcessed > 0) {
     return {
-      totalRaised: state.botStatus.totalAmountProcessed,
-      campaignName: state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : undefined,
+      ...cachedCampaignSummary,
+      campaignName: state.tiltify.campaignName?.trim() || cachedCampaignSummary.campaignName || cachedCampaignSummary.name,
     };
   }
 
-  return null;
+  // Tiltify v5 campaign endpoints (try direct ID/slug, then slug endpoints)
+  const candidateUrls = [
+    `https://v5api.tiltify.com/api/public/campaigns/${encodeURIComponent(cid)}`,
+    `https://v5api.tiltify.com/api/public/campaigns/by/slug/${encodeURIComponent(cid)}`,
+    `https://v5api.tiltify.com/api/public/campaigns?slug=${encodeURIComponent(cid)}`,
+  ];
+
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (state.tiltify.apiToken) {
+    headers["Authorization"] = `Bearer ${state.tiltify.apiToken.trim()}`;
+  }
+
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const camp = Array.isArray(data?.data) ? data.data[0] : (data?.data || data);
+        if (!camp || typeof camp !== "object") continue;
+
+        const raisedVal =
+          camp.amount_raised?.value ??
+          camp.total_amount_raised?.value ??
+          camp.amount_raised ??
+          camp.total_amount_raised;
+        const goalVal = camp.goal?.value ?? camp.goal;
+        const currency = camp.amount_raised?.currency ?? camp.goal?.currency ?? "USD";
+        const totalRaised = typeof raisedVal === "number" ? raisedVal : parseFloat(raisedVal);
+        const targetGoal = typeof goalVal === "number" ? goalVal : parseFloat(goalVal);
+
+        const realName = camp.name || camp.title || camp.campaign_name || camp.slug || cid;
+        const effectiveName = state.tiltify.campaignName?.trim() || realName;
+
+        cachedCampaignSummary = {
+          id: cid,
+          name: realName,
+          campaignName: effectiveName,
+          slug: camp.slug || undefined,
+          totalRaised: !isNaN(totalRaised) ? totalRaised : undefined,
+          targetGoal: !isNaN(targetGoal) ? targetGoal : undefined,
+          currency,
+          fetchedAt: Date.now(),
+        };
+
+        return cachedCampaignSummary;
+      }
+    } catch {
+      // Continue to next candidate endpoint
+    }
+  }
+
+  const fallbackCampaignName =
+    state.tiltify.campaignName?.trim() ||
+    (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : undefined);
+
+  return {
+    totalRaised: state.botStatus.totalAmountProcessed > 0 ? state.botStatus.totalAmountProcessed : undefined,
+    campaignName: fallbackCampaignName,
+    name: fallbackCampaignName,
+  };
 }
 
 // Helper to extract ClaimedReward and delivery details from Tiltify donation payloads
@@ -1571,7 +1745,7 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
           currency: currencyVal,
           comment: raw.comment || raw.message || undefined,
           reward: reward,
-          campaignName: campaignSummary?.campaignName || raw.campaign?.name || `Campaign #${campaignId}`,
+          campaignName: state.tiltify.campaignName?.trim() || campaignSummary?.campaignName || raw.campaign?.name || (campaignId ? `Campaign #${campaignId}` : "Tiltify Campaign"),
           campaignId: campaignId,
           totalRaised: campaignSummary?.totalRaised,
           targetGoal: campaignSummary?.targetGoal,
@@ -1629,7 +1803,7 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
                 amount: auctionInfo.winningBid,
                 currency: auctionInfo.currency,
                 auction: auctionInfo,
-                campaignName: rawAuc.campaign?.name || `Campaign #${campaignId}`,
+                campaignName: state.tiltify.campaignName?.trim() || rawAuc.campaign?.name || campaignSummary?.campaignName || (campaignId ? `Campaign #${campaignId}` : "Tiltify Campaign"),
                 campaignId: campaignId,
                 receivedAt: auctionInfo.endedAt || new Date().toISOString(),
                 source: "poll",
@@ -1965,10 +2139,185 @@ app.delete("/api/discord/avatar", requireAuth, (req: Request, res: Response) => 
   state.customAvatar = null;
   state.discord.botAvatarUrl = "https://tiltify.com/favicon.ico";
   state.discord.customAvatarName = undefined;
+  saveConfigToDisk();
   res.json({
     success: true,
     avatarUrl: state.discord.botAvatarUrl,
     message: "Reset bot icon to default Tiltify favicon",
+  });
+});
+
+// 2.41 POST /api/discord/thumbnail: Upload custom thumbnail image from computer
+app.post("/api/discord/thumbnail", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { image, fileName } = req.body;
+    if (!image || typeof image !== "string") {
+      return res.status(400).json({ success: false, error: "No image data received" });
+    }
+
+    let buffer: Buffer;
+    let contentType = "image/png";
+
+    const match = image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+    if (match) {
+      contentType = match[1];
+      buffer = Buffer.from(match[2], "base64");
+    } else {
+      buffer = Buffer.from(image, "base64");
+    }
+
+    if (buffer.length === 0) {
+      return res.status(400).json({ success: false, error: "Uploaded image is empty" });
+    }
+
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: "Image exceeds 10MB limit" });
+    }
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "localhost:3000";
+    state.publicBaseUrl = `${proto}://${host}`;
+
+    const cleanFileName = (fileName || "custom-thumbnail.png").replace(/[^a-zA-Z0-9._-]/g, "_");
+
+    state.customThumbnail = {
+      buffer,
+      contentType,
+      fileName: cleanFileName,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const thumbnailUrl = `${state.publicBaseUrl}/api/discord/thumbnail?t=${Date.now()}`;
+    state.discord.embedThumbnailUrl = thumbnailUrl;
+    state.discord.customThumbnailName = cleanFileName;
+
+    saveConfigToDisk();
+
+    res.json({
+      success: true,
+      thumbnailUrl,
+      fileName: cleanFileName,
+      contentType,
+      sizeBytes: buffer.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: "Failed to process thumbnail upload", details: err?.message });
+  }
+});
+
+// 2.42 GET /api/discord/thumbnail: Serve active custom thumbnail image
+app.get("/api/discord/thumbnail", (req: Request, res: Response) => {
+  if (state.customThumbnail && state.customThumbnail.buffer) {
+    res.set("Content-Type", state.customThumbnail.contentType);
+    res.set("Cache-Control", "public, max-age=3600");
+    res.send(state.customThumbnail.buffer);
+  } else if (state.discord.embedThumbnailUrl && !state.discord.embedThumbnailUrl.includes("/api/discord/thumbnail")) {
+    res.redirect(state.discord.embedThumbnailUrl);
+  } else {
+    res.status(404).send("No custom thumbnail found");
+  }
+});
+
+// 2.43 DELETE /api/discord/thumbnail: Clear custom thumbnail image
+app.delete("/api/discord/thumbnail", requireAuth, (req: Request, res: Response) => {
+  state.customThumbnail = null;
+  state.discord.embedThumbnailUrl = "";
+  state.discord.customThumbnailName = undefined;
+  try {
+    const p = path.join(DATA_DIR, "custom-thumbnail.bin");
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {}
+  saveConfigToDisk();
+  res.json({
+    success: true,
+    message: "Custom thumbnail removed",
+  });
+});
+
+// 2.44 POST /api/discord/banner: Upload custom banner image from computer
+app.post("/api/discord/banner", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { image, fileName } = req.body;
+    if (!image || typeof image !== "string") {
+      return res.status(400).json({ success: false, error: "No image data received" });
+    }
+
+    let buffer: Buffer;
+    let contentType = "image/png";
+
+    const match = image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+    if (match) {
+      contentType = match[1];
+      buffer = Buffer.from(match[2], "base64");
+    } else {
+      buffer = Buffer.from(image, "base64");
+    }
+
+    if (buffer.length === 0) {
+      return res.status(400).json({ success: false, error: "Uploaded image is empty" });
+    }
+
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: "Image exceeds 10MB limit" });
+    }
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "localhost:3000";
+    state.publicBaseUrl = `${proto}://${host}`;
+
+    const cleanFileName = (fileName || "custom-banner.png").replace(/[^a-zA-Z0-9._-]/g, "_");
+
+    state.customBanner = {
+      buffer,
+      contentType,
+      fileName: cleanFileName,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const bannerUrl = `${state.publicBaseUrl}/api/discord/banner?t=${Date.now()}`;
+    state.discord.embedBannerUrl = bannerUrl;
+    state.discord.customBannerName = cleanFileName;
+
+    saveConfigToDisk();
+
+    res.json({
+      success: true,
+      bannerUrl,
+      fileName: cleanFileName,
+      contentType,
+      sizeBytes: buffer.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: "Failed to process banner upload", details: err?.message });
+  }
+});
+
+// 2.45 GET /api/discord/banner: Serve active custom banner image
+app.get("/api/discord/banner", (req: Request, res: Response) => {
+  if (state.customBanner && state.customBanner.buffer) {
+    res.set("Content-Type", state.customBanner.contentType);
+    res.set("Cache-Control", "public, max-age=3600");
+    res.send(state.customBanner.buffer);
+  } else if (state.discord.embedBannerUrl && !state.discord.embedBannerUrl.includes("/api/discord/banner")) {
+    res.redirect(state.discord.embedBannerUrl);
+  } else {
+    res.status(404).send("No custom banner found");
+  }
+});
+
+// 2.46 DELETE /api/discord/banner: Clear custom banner image
+app.delete("/api/discord/banner", requireAuth, (req: Request, res: Response) => {
+  state.customBanner = null;
+  state.discord.embedBannerUrl = "";
+  state.discord.customBannerName = undefined;
+  try {
+    const p = path.join(DATA_DIR, "custom-banner.bin");
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {}
+  saveConfigToDisk();
+  res.json({
+    success: true,
+    message: "Custom banner removed",
   });
 });
 
@@ -2013,6 +2362,54 @@ app.post("/api/tiltify/token", requireAuth, async (req: Request, res: Response) 
   });
 });
 
+// 2.6 POST /api/tiltify/fetch-campaign: Query Tiltify v5 API for campaign name, goal, and raised amount
+app.post("/api/tiltify/fetch-campaign", requireAuth, async (req: Request, res: Response) => {
+  const targetId = (req.body.campaignId || state.tiltify.campaignId || "").trim();
+  const apiToken = (req.body.apiToken || state.tiltify.apiToken || "").trim();
+
+  if (!targetId) {
+    return res.status(400).json({
+      success: false,
+      error: "Please enter a Tiltify Campaign ID, Slug, or URL.",
+    });
+  }
+
+  const originalToken = state.tiltify.apiToken;
+  if (apiToken) state.tiltify.apiToken = apiToken;
+
+  try {
+    const summary = await fetchLiveCampaignSummary(targetId, true);
+    if (summary && summary.name) {
+      res.json({
+        success: true,
+        campaign: {
+          id: summary.id,
+          name: summary.name,
+          slug: summary.slug,
+          campaignName: summary.name,
+          totalRaised: summary.totalRaised,
+          targetGoal: summary.targetGoal,
+          currency: summary.currency || "USD",
+        },
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: `Could not find campaign "${targetId}" on Tiltify. Verify the Campaign ID/Slug or ensure your API Token is active.`,
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err?.message || "Failed to fetch campaign details from Tiltify.",
+    });
+  } finally {
+    if (apiToken && !originalToken) {
+      state.tiltify.apiToken = originalToken;
+    }
+  }
+});
+
 // 3. POST /api/discord/test: Send a test embed to Discord
 app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) => {
   const isAuction = req.body.eventType === "auction_ended" || Boolean(req.body.auction);
@@ -2029,7 +2426,7 @@ app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) =
       amount: typeof auc.winningBid === "number" ? auc.winningBid : (typeof req.body.amount === "number" ? req.body.amount : 150.0),
       currency: auc.currency || req.body.currency || "USD",
       auction: auc,
-      campaignName: req.body.campaignName || (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : "Charity Stream 2026"),
+      campaignName: req.body.campaignName || state.tiltify.campaignName?.trim() || (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : "Charity Stream 2026"),
       totalRaised: typeof req.body.totalRaised === "number" ? req.body.totalRaised : 3625.0,
       targetGoal: typeof req.body.targetGoal === "number" ? req.body.targetGoal : 5000.0,
       receivedAt: new Date().toISOString(),
@@ -2044,7 +2441,7 @@ app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) =
       amount: typeof req.body.amount === "number" ? req.body.amount : 25.0,
       currency: req.body.currency || "USD",
       comment: req.body.comment || "This is a test notification from the Tiltify Discord Bot! Everything is configured properly. 🚀",
-      campaignName: req.body.campaignName || (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : "Charity Stream 2026"),
+      campaignName: req.body.campaignName || state.tiltify.campaignName?.trim() || (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : "Charity Stream 2026"),
       reward: req.body.reward || undefined,
       totalRaised: typeof req.body.totalRaised === "number" ? req.body.totalRaised : 3625.0,
       targetGoal: typeof req.body.targetGoal === "number" ? req.body.targetGoal : 5000.0,
@@ -2132,7 +2529,7 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
         amount: auctionInfo.winningBid,
         currency: auctionInfo.currency,
         auction: auctionInfo,
-        campaignName: raw?.campaign?.name || raw?.campaign_name || "Tiltify Campaign",
+        campaignName: state.tiltify.campaignName?.trim() || raw?.campaign?.name || raw?.campaign_name || "Tiltify Campaign",
         campaignId: raw?.campaign_id || state.tiltify.campaignId || undefined,
         causeName: raw?.cause?.name || raw?.charity?.name || undefined,
         receivedAt: auctionInfo.endedAt || raw?.created_at || new Date().toISOString(),
@@ -2161,7 +2558,7 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
         currency: currency,
         comment: raw?.comment || raw?.message || undefined,
         reward: reward,
-        campaignName: raw?.campaign?.name || raw?.campaign_name || "Tiltify Campaign",
+        campaignName: state.tiltify.campaignName?.trim() || raw?.campaign?.name || raw?.campaign_name || "Tiltify Campaign",
         campaignId: raw?.campaign_id || state.tiltify.campaignId || undefined,
         causeName: raw?.cause?.name || raw?.charity?.name || undefined,
         receivedAt: raw?.created_at || new Date().toISOString(),
@@ -2199,7 +2596,7 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
       const goal = campObj.goal?.value ?? campObj.goal;
       if (goal !== undefined) donation.targetGoal = parseFloat(String(goal));
       if (campObj.name && (!donation.campaignName || donation.campaignName === "Tiltify Campaign")) {
-        donation.campaignName = campObj.name;
+        donation.campaignName = state.tiltify.campaignName?.trim() || campObj.name;
       }
     }
 
@@ -2209,7 +2606,7 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
         if (summary.totalRaised !== undefined) donation.totalRaised = summary.totalRaised;
         if (summary.targetGoal !== undefined) donation.targetGoal = summary.targetGoal;
         if (summary.campaignName && (!donation.campaignName || donation.campaignName === "Tiltify Campaign")) {
-          donation.campaignName = summary.campaignName;
+          donation.campaignName = state.tiltify.campaignName?.trim() || summary.campaignName;
         }
       }
     }

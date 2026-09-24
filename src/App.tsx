@@ -72,6 +72,7 @@ export default function App() {
     apiToken: '',
     tokenExpiresAt: null,
     campaignId: '',
+    campaignName: '',
     pollIntervalSeconds: 30,
     pollingEnabled: false,
     webhookSecret: '',
@@ -560,6 +561,7 @@ export default function App() {
           {activeTab === 'discord' && (
             <DiscordConfigCard
               config={discordConfig}
+              campaignName={tiltifyConfig.campaignName}
               onSave={handleSaveDiscord}
               onTest={handleTestDiscord}
             />
@@ -586,7 +588,7 @@ export default function App() {
           {activeTab === 'simulator' && (
             <DonationSimulator
               onSimulate={handleSimulate}
-              defaultCampaignName={tiltifyConfig.campaignId ? `Tiltify Campaign #${tiltifyConfig.campaignId}` : 'Community Charity Drive'}
+              defaultCampaignName={tiltifyConfig.campaignName?.trim() || (tiltifyConfig.campaignId ? `Tiltify Campaign #${tiltifyConfig.campaignId}` : 'Community Charity Drive')}
             />
           )}
         </div>

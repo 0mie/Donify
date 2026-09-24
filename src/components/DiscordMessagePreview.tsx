@@ -418,50 +418,74 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                   {donationDesc}
                 </div>
 
-                {/* Embed Fields Grid */}
-                <div className="grid grid-cols-2 gap-2 text-[13px] mb-3">
-                  <div className="bg-[#232428]/50 p-2 rounded">
-                    <div className="text-[#949ba4] text-[11px] font-bold uppercase tracking-wider mb-0.5">👤 Donor</div>
-                    <div className="text-white font-medium">{sampleDonation.donorName}</div>
-                  </div>
-                  <div className="bg-[#232428]/50 p-2 rounded">
-                    <div className="text-[#949ba4] text-[11px] font-bold uppercase tracking-wider mb-0.5">💰 Amount</div>
-                    <div className="text-[#23a55a] font-bold">{formattedAmount}</div>
-                  </div>
-                </div>
+                {/* Embed Fields Grid / Summary based on layout */}
+                {config.embedLayout === 'compact' ? (
+                  /* ⚡ COMPACT LAYOUT: Streamlined horizontal stats bar for high volume streams */
+                  <div className="space-y-2 mb-3">
+                    <div className="bg-[#232428]/80 px-2.5 py-1.5 rounded-lg border border-neutral-700/50 text-[12px] flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
+                      <div>
+                        <span className="text-[#949ba4]">Donor:</span>{' '}
+                        <strong className="text-white">{sampleDonation.donorName}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[#949ba4]">Amount:</span>{' '}
+                        <span className="text-[#23a55a] font-bold">{formattedAmount}</span>
+                      </div>
+                      {config.includeCampaignDetails && sampleDonation.campaignName && (
+                        <div className="text-[11px] text-[#b5bac1]">
+                          <span className="text-[#949ba4]">Campaign:</span> {sampleDonation.campaignName}
+                        </div>
+                      )}
+                    </div>
 
-                {/* Comment Block */}
-                {config.includeComment && sampleDonation.comment && (
-                  <div className="mb-3 text-[13px]">
-                    <div className="text-[#949ba4] text-[11px] font-bold uppercase tracking-wider mb-1">💬 Message</div>
-                    <div className="border-l-2 border-[#4e5058] pl-2.5 text-[#b5bac1] italic">
-                      "{sampleDonation.comment}"
-                    </div>
+                    {/* Compact Single-line Progress */}
+                    {config.includeCampaignProgress !== false && (
+                      <div className="bg-[#232428]/60 px-2.5 py-1 rounded text-[11px] flex items-center justify-between text-neutral-300">
+                        <span className="text-amber-400 font-semibold">🏆 Progress</span>
+                        <span>
+                          <strong className="text-white">$3,625.00</strong> of $5,000.00 (72.5%)
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
+                ) : (
+                  /* 🎴 MODERN CARD & 📄 MINIMALIST: Spacious 2-Column Grid */
+                  <>
+                    <div className="grid grid-cols-2 gap-2 text-[13px] mb-3">
+                      <div className="bg-[#232428]/50 p-2 rounded">
+                        <div className="text-[#949ba4] text-[11px] font-bold uppercase tracking-wider mb-0.5">👤 Donor</div>
+                        <div className="text-white font-medium">{sampleDonation.donorName}</div>
+                      </div>
+                      <div className="bg-[#232428]/50 p-2 rounded">
+                        <div className="text-[#949ba4] text-[11px] font-bold uppercase tracking-wider mb-0.5">💰 Amount</div>
+                        <div className="text-[#23a55a] font-bold">{formattedAmount}</div>
+                      </div>
+                    </div>
 
-                {/* Campaign Details */}
-                {config.includeCampaignDetails && sampleDonation.campaignName && (
-                  <div className="mb-3 text-[12px] bg-[#232428]/60 p-2 rounded text-[#b5bac1]">
-                    <span className="text-[#949ba4] font-semibold">Campaign:</span> {sampleDonation.campaignName}
-                  </div>
-                )}
+                    {/* Campaign Details */}
+                    {config.includeCampaignDetails && sampleDonation.campaignName && (
+                      <div className="mb-3 text-[12px] bg-[#232428]/60 p-2 rounded text-[#b5bac1]">
+                        <span className="text-[#949ba4] font-semibold">Campaign:</span> {sampleDonation.campaignName}
+                      </div>
+                    )}
 
-                {/* Campaign Progress & Total Raised */}
-                {config.includeCampaignProgress !== false && config.embedLayout !== 'minimal' && (
-                  <div className="mb-3 text-[12px] bg-[#232428]/80 border border-amber-500/30 p-2.5 rounded-lg text-[#b5bac1]">
-                    <div className="text-amber-400 text-[11px] font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
-                      <span>🏆 Campaign Progress</span>
-                      <span>72.5%</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs mb-1 font-medium">
-                      <span className="text-white">$3,625.00 raised</span>
-                      <span className="text-[#949ba4]">Goal: $5,000.00</span>
-                    </div>
-                    <div className="text-[11px] font-mono text-emerald-400">
-                      {renderProgressBarText(config.progressBarCharStyle)}
-                    </div>
-                  </div>
+                    {/* Campaign Progress & Total Raised */}
+                    {config.includeCampaignProgress !== false && config.embedLayout !== 'minimal' && (
+                      <div className="mb-3 text-[12px] bg-[#232428]/80 border border-amber-500/30 p-2.5 rounded-lg text-[#b5bac1]">
+                        <div className="text-amber-400 text-[11px] font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                          <span>🏆 Campaign Progress</span>
+                          <span>72.5%</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs mb-1 font-medium">
+                          <span className="text-white">$3,625.00 raised</span>
+                          <span className="text-[#949ba4]">Goal: $5,000.00</span>
+                        </div>
+                        <div className="text-[11px] font-mono text-emerald-400">
+                          {renderProgressBarText(config.progressBarCharStyle)}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Selected Reward Block */}

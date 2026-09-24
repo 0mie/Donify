@@ -21,10 +21,13 @@ import {
   Type,
   ImagePlus,
   BarChart3,
+  Info,
+  Link2,
 } from 'lucide-react';
 
 interface DiscordConfigCardProps {
   config: DiscordConfig;
+  campaignName?: string;
   onSave: (updated: Partial<DiscordConfig>) => Promise<void>;
   onTest: () => Promise<{ success: boolean; error?: string }>;
 }
@@ -121,6 +124,7 @@ const THEME_PRESETS: ThemePreset[] = [
 
 export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   config,
+  campaignName,
   onSave,
   onTest,
 }) => {
@@ -137,6 +141,26 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Thumbnail Media Management State
+  const [thumbnailMode, setThumbnailMode] = useState<'upload' | 'url'>(() => {
+    return (config.customThumbnailName || (config.embedThumbnailUrl && config.embedThumbnailUrl.includes('/api/discord/thumbnail')))
+      ? 'upload'
+      : (config.embedThumbnailUrl ? 'url' : 'upload');
+  });
+  const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
+  const [isDraggingThumbnail, setIsDraggingThumbnail] = useState(false);
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+
+  // Banner Media Management State
+  const [bannerMode, setBannerMode] = useState<'upload' | 'url'>(() => {
+    return (config.customBannerName || (config.embedBannerUrl && config.embedBannerUrl.includes('/api/discord/banner')))
+      ? 'upload'
+      : (config.embedBannerUrl ? 'url' : 'upload');
+  });
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [isDraggingBanner, setIsDraggingBanner] = useState(false);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Only update localConfig when config changes externally and user has not typed unsaved edits
@@ -291,6 +315,238 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  // --- Embed Thumbnail Upload & Handlers ---
+  const handleUploadThumbnail = async (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setStatusMessage({ type: 'error', text: 'Please select a valid image file (PNG, JPG, WebP, GIF).' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setStatusMessage({ type: 'error', text: 'Image exceeds 10MB limit. Please select a smaller file.' });
+      return;
+    }
+
+    setIsUploadingThumbnail(true);
+    setStatusMessage(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+
+        setLocalConfig((prev) => ({
+          ...prev,
+          embedThumbnailUrl: dataUrl,
+          customThumbnailName: file.name,
+        }));
+
+        const token = localStorage.getItem('tiltify_admin_token');
+        const res = await fetch('/api/discord/thumbnail', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            image: dataUrl,
+            fileName: file.name,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to upload thumbnail image');
+        }
+
+        setLocalConfig((prev) => ({
+          ...prev,
+          embedThumbnailUrl: data.thumbnailUrl,
+          customThumbnailName: data.fileName,
+        }));
+
+        await onSave({
+          embedThumbnailUrl: data.thumbnailUrl,
+          customThumbnailName: data.fileName,
+        });
+
+        setStatusMessage({
+          type: 'success',
+          text: `Custom thumbnail "${data.fileName}" uploaded and active!`,
+        });
+      };
+
+      reader.onerror = () => {
+        setStatusMessage({ type: 'error', text: 'Failed to read thumbnail image file.' });
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'Error uploading thumbnail.' });
+    } finally {
+      setIsUploadingThumbnail(false);
+    }
+  };
+
+  const handleResetThumbnail = async () => {
+    setIsUploadingThumbnail(true);
+    try {
+      const token = localStorage.getItem('tiltify_admin_token');
+      await fetch('/api/discord/thumbnail', {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      setLocalConfig((prev) => ({
+        ...prev,
+        embedThumbnailUrl: '',
+        customThumbnailName: undefined,
+      }));
+      await onSave({
+        embedThumbnailUrl: '',
+        customThumbnailName: undefined,
+      });
+      setStatusMessage({ type: 'success', text: 'Embed thumbnail removed.' });
+    } catch {
+      setStatusMessage({ type: 'error', text: 'Failed to clear thumbnail.' });
+    } finally {
+      setIsUploadingThumbnail(false);
+    }
+  };
+
+  const handleThumbnailDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingThumbnail(true);
+  };
+
+  const handleThumbnailDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingThumbnail(false);
+  };
+
+  const handleThumbnailDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingThumbnail(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleUploadThumbnail(e.dataTransfer.files[0]);
+    }
+  };
+
+  // --- Embed Banner Upload & Handlers ---
+  const handleUploadBanner = async (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setStatusMessage({ type: 'error', text: 'Please select a valid image file (PNG, JPG, WebP, GIF).' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setStatusMessage({ type: 'error', text: 'Banner image exceeds 10MB limit. Please select a smaller file.' });
+      return;
+    }
+
+    setIsUploadingBanner(true);
+    setStatusMessage(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+
+        setLocalConfig((prev) => ({
+          ...prev,
+          embedBannerUrl: dataUrl,
+          customBannerName: file.name,
+        }));
+
+        const token = localStorage.getItem('tiltify_admin_token');
+        const res = await fetch('/api/discord/banner', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            image: dataUrl,
+            fileName: file.name,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to upload banner image');
+        }
+
+        setLocalConfig((prev) => ({
+          ...prev,
+          embedBannerUrl: data.bannerUrl,
+          customBannerName: data.fileName,
+        }));
+
+        await onSave({
+          embedBannerUrl: data.bannerUrl,
+          customBannerName: data.fileName,
+        });
+
+        setStatusMessage({
+          type: 'success',
+          text: `Custom banner "${data.fileName}" uploaded and active!`,
+        });
+      };
+
+      reader.onerror = () => {
+        setStatusMessage({ type: 'error', text: 'Failed to read banner image file.' });
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'Error uploading banner.' });
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  const handleResetBanner = async () => {
+    setIsUploadingBanner(true);
+    try {
+      const token = localStorage.getItem('tiltify_admin_token');
+      await fetch('/api/discord/banner', {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      setLocalConfig((prev) => ({
+        ...prev,
+        embedBannerUrl: '',
+        customBannerName: undefined,
+      }));
+      await onSave({
+        embedBannerUrl: '',
+        customBannerName: undefined,
+      });
+      setStatusMessage({ type: 'success', text: 'Embed banner removed.' });
+    } catch {
+      setStatusMessage({ type: 'error', text: 'Failed to clear banner.' });
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  const handleBannerDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingBanner(true);
+  };
+
+  const handleBannerDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingBanner(false);
+  };
+
+  const handleBannerDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingBanner(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleUploadBanner(e.dataTransfer.files[0]);
     }
   };
 
@@ -715,61 +971,380 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                 </div>
 
                 {/* 6. Rich Media: Thumbnail & Banner Image */}
-                <div className="pt-2 border-t border-neutral-800/80 space-y-3">
-                  <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block flex items-center gap-1.5">
-                    <ImagePlus className="w-3.5 h-3.5 text-teal-400" />
-                    <span>Embed Media &amp; Artwork (Optional)</span>
-                  </label>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="pt-2 border-t border-neutral-800/80 space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-neutral-400">Embed Thumbnail URL (Top Right)</label>
-                        {localConfig.embedThumbnailUrl && (
-                          <button
-                            type="button"
-                            onClick={() => handleInputChange('embedThumbnailUrl', '')}
-                            className="text-[10px] text-neutral-500 hover:text-neutral-300"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        type="url"
-                        value={localConfig.embedThumbnailUrl || ''}
-                        onChange={(e) => handleInputChange('embedThumbnailUrl', e.target.value)}
-                        placeholder="https://example.com/logo.png"
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <p className="text-[10px] text-neutral-500 mt-1">
-                        Renders as an icon in the upper-right corner of the Discord card.
+                      <label className="text-xs font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <ImagePlus className="w-4 h-4 text-teal-400" />
+                        <span>Embed Media &amp; Artwork (Custom Upload or URL)</span>
+                      </label>
+                      <p className="text-[11px] text-neutral-400 mt-0.5">
+                        Upload your own custom images directly from your computer or provide web URLs. Review the recommended dimensions below for optimal Discord display.
                       </p>
                     </div>
+                  </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-neutral-400">Embed Banner Image URL (Wide)</label>
-                        {localConfig.embedBannerUrl && (
-                          <button
-                            type="button"
-                            onClick={() => handleInputChange('embedBannerUrl', '')}
-                            className="text-[10px] text-neutral-500 hover:text-neutral-300"
-                          >
-                            Clear
-                          </button>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* CARD 1: Embed Thumbnail (Top-Right) */}
+                    <div className="bg-neutral-950/80 border border-neutral-800/90 rounded-2xl p-4 space-y-3.5 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 font-bold text-xs">
+                              1
+                            </div>
+                            <div>
+                              <span className="font-semibold text-xs text-white block">Embed Thumbnail (Top Right)</span>
+                              <span className="text-[10px] text-neutral-400 block">Upper-right corner badge</span>
+                            </div>
+                          </div>
+
+                          {/* Mode Switcher */}
+                          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setThumbnailMode('upload')}
+                              className={`px-2.5 py-1 rounded font-medium transition-all flex items-center gap-1.5 ${
+                                thumbnailMode === 'upload'
+                                  ? 'bg-neutral-800 text-white shadow-sm'
+                                  : 'text-neutral-400 hover:text-neutral-200'
+                              }`}
+                            >
+                              <Upload className="w-3 h-3 text-teal-400" />
+                              Upload PC
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setThumbnailMode('url')}
+                              className={`px-2.5 py-1 rounded font-medium transition-all flex items-center gap-1.5 ${
+                                thumbnailMode === 'url'
+                                  ? 'bg-neutral-800 text-white shadow-sm'
+                                  : 'text-neutral-400 hover:text-neutral-200'
+                              }`}
+                            >
+                              <Link2 className="w-3 h-3 text-indigo-400" />
+                              Web URL
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Recommended Size & Dimension Specifications Badge */}
+                        <div className="bg-teal-950/20 border border-teal-800/40 rounded-xl p-2.5 text-[11px] text-teal-200/90 space-y-1.5 mb-3">
+                          <div className="flex items-center gap-1.5 font-semibold text-teal-300">
+                            <Info className="w-3.5 h-3.5 shrink-0" />
+                            <span>Recommended Size &amp; Specifications:</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-neutral-300 pl-5">
+                            <div>• <strong>Aspect Ratio:</strong> 1:1 (Square)</div>
+                            <div>• <strong>Render Size:</strong> 80×80 px</div>
+                            <div>• <strong>Max Upload:</strong> 256×256 px</div>
+                            <div>• <strong>Formats:</strong> PNG, JPG, WebP, GIF (&le;10MB)</div>
+                          </div>
+                          <p className="text-[10px] text-neutral-400 pl-5">
+                            Discord displays this as a square badge in the upper right. Best for streamer logos, charity badges, or campaign emotes.
+                          </p>
+                        </div>
+
+                        {thumbnailMode === 'upload' ? (
+                          <div className="space-y-2.5">
+                            <div
+                              onDragOver={handleThumbnailDragOver}
+                              onDragLeave={handleThumbnailDragLeave}
+                              onDrop={handleThumbnailDrop}
+                              onClick={() => thumbnailInputRef.current?.click()}
+                              className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${
+                                isDraggingThumbnail
+                                  ? 'border-teal-500 bg-teal-950/30 text-teal-300 scale-[0.99]'
+                                  : 'border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 hover:bg-neutral-900/70'
+                              }`}
+                            >
+                              <input
+                                ref={thumbnailInputRef}
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files.length > 0) {
+                                    handleUploadThumbnail(e.target.files[0]);
+                                  }
+                                }}
+                              />
+                              <div className="flex items-center justify-center gap-2 mb-1 text-xs text-neutral-200">
+                                <Upload className={`w-4 h-4 ${isDraggingThumbnail ? 'text-teal-400 animate-bounce' : 'text-teal-400'}`} />
+                                <span className="font-medium">
+                                  {isDraggingThumbnail ? 'Drop image file here' : 'Click to browse or drag & drop image'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-neutral-400">
+                                PNG (supports transparency), JPG, WebP, or GIF up to 10MB.
+                              </p>
+                            </div>
+
+                            {/* Thumbnail Preview & Status */}
+                            {localConfig.embedThumbnailUrl ? (
+                              <div className="flex items-center gap-3 p-2 bg-neutral-900/70 border border-neutral-800 rounded-xl">
+                                <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-neutral-950 border border-neutral-700 shrink-0">
+                                  <img
+                                    src={localConfig.embedThumbnailUrl}
+                                    alt="Thumbnail preview"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = 'https://tiltify.com/favicon.ico';
+                                    }}
+                                  />
+                                  {isUploadingThumbnail && (
+                                    <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
+                                      <RefreshCw className="w-4 h-4 text-teal-400 animate-spin" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0 text-xs">
+                                  <div className="flex items-center gap-1.5 text-white font-medium truncate">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                                    <span className="truncate">{localConfig.customThumbnailName || 'Custom Thumbnail Active'}</span>
+                                  </div>
+                                  <span className="text-[10px] text-neutral-400 block font-mono">1:1 Square Thumbnail</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleResetThumbnail}
+                                  disabled={isUploadingThumbnail}
+                                  className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 rounded-lg transition-colors shrink-0"
+                                  title="Remove custom thumbnail"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-neutral-500 italic text-center py-1">
+                                No custom thumbnail selected (blank by default).
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[11px] text-neutral-400">Direct Image URL</label>
+                                {localConfig.embedThumbnailUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInputChange('embedThumbnailUrl', '')}
+                                    className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                              </div>
+                              <input
+                                type="url"
+                                value={localConfig.embedThumbnailUrl || ''}
+                                onChange={(e) => handleInputChange('embedThumbnailUrl', e.target.value)}
+                                placeholder="https://example.com/logo.png"
+                                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                              />
+                            </div>
+                            {localConfig.embedThumbnailUrl && (
+                              <div className="flex items-center gap-2.5 p-2 bg-neutral-900/60 border border-neutral-800/80 rounded-xl">
+                                <div className="w-10 h-10 rounded-md overflow-hidden bg-neutral-950 border border-neutral-700 shrink-0">
+                                  <img
+                                    src={localConfig.embedThumbnailUrl}
+                                    alt="Thumbnail preview"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = 'https://tiltify.com/favicon.ico';
+                                    }}
+                                  />
+                                </div>
+                                <div className="text-[11px] text-neutral-300 truncate font-mono flex-1">
+                                  {localConfig.embedThumbnailUrl}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <input
-                        type="url"
-                        value={localConfig.embedBannerUrl || ''}
-                        onChange={(e) => handleInputChange('embedBannerUrl', e.target.value)}
-                        placeholder="https://example.com/banner.png"
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <p className="text-[10px] text-neutral-500 mt-1">
-                        Wide artwork banner shown across the bottom of the notification card.
-                      </p>
+                    </div>
+
+                    {/* CARD 2: Embed Banner Artwork (Wide Bottom) */}
+                    <div className="bg-neutral-950/80 border border-neutral-800/90 rounded-2xl p-4 space-y-3.5 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs">
+                              2
+                            </div>
+                            <div>
+                              <span className="font-semibold text-xs text-white block">Embed Banner Artwork (Wide Bottom)</span>
+                              <span className="text-[10px] text-neutral-400 block">Full-width bottom showcase</span>
+                            </div>
+                          </div>
+
+                          {/* Mode Switcher */}
+                          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setBannerMode('upload')}
+                              className={`px-2.5 py-1 rounded font-medium transition-all flex items-center gap-1.5 ${
+                                bannerMode === 'upload'
+                                  ? 'bg-neutral-800 text-white shadow-sm'
+                                  : 'text-neutral-400 hover:text-neutral-200'
+                              }`}
+                            >
+                              <Upload className="w-3 h-3 text-indigo-400" />
+                              Upload PC
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBannerMode('url')}
+                              className={`px-2.5 py-1 rounded font-medium transition-all flex items-center gap-1.5 ${
+                                bannerMode === 'url'
+                                  ? 'bg-neutral-800 text-white shadow-sm'
+                                  : 'text-neutral-400 hover:text-neutral-200'
+                              }`}
+                            >
+                              <Link2 className="w-3 h-3 text-teal-400" />
+                              Web URL
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Recommended Size & Dimension Specifications Badge */}
+                        <div className="bg-indigo-950/20 border border-indigo-800/40 rounded-xl p-2.5 text-[11px] text-indigo-200/90 space-y-1.5 mb-3">
+                          <div className="flex items-center gap-1.5 font-semibold text-indigo-300">
+                            <Info className="w-3.5 h-3.5 shrink-0" />
+                            <span>Recommended Size &amp; Specifications:</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-neutral-300 pl-5">
+                            <div>• <strong>Aspect Ratio:</strong> 16:9 Landscape</div>
+                            <div>• <strong>Recommended:</strong> 1200×675 px (or 960×540 px)</div>
+                            <div>• <strong>Min Dimensions:</strong> 400×225 px</div>
+                            <div>• <strong>Formats:</strong> PNG, JPG, WebP, GIF (&le;10MB)</div>
+                          </div>
+                          <p className="text-[10px] text-neutral-400 pl-5">
+                            Discord displays this wide artwork banner across the entire bottom of the embed card. Best for campaign posters, marathon headers, or milestone art.
+                          </p>
+                        </div>
+
+                        {bannerMode === 'upload' ? (
+                          <div className="space-y-2.5">
+                            <div
+                              onDragOver={handleBannerDragOver}
+                              onDragLeave={handleBannerDragLeave}
+                              onDrop={handleBannerDrop}
+                              onClick={() => bannerInputRef.current?.click()}
+                              className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${
+                                isDraggingBanner
+                                  ? 'border-indigo-500 bg-indigo-950/30 text-indigo-300 scale-[0.99]'
+                                  : 'border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 hover:bg-neutral-900/70'
+                              }`}
+                            >
+                              <input
+                                ref={bannerInputRef}
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files.length > 0) {
+                                    handleUploadBanner(e.target.files[0]);
+                                  }
+                                }}
+                              />
+                              <div className="flex items-center justify-center gap-2 mb-1 text-xs text-neutral-200">
+                                <Upload className={`w-4 h-4 ${isDraggingBanner ? 'text-indigo-400 animate-bounce' : 'text-indigo-400'}`} />
+                                <span className="font-medium">
+                                  {isDraggingBanner ? 'Drop banner file here' : 'Click to browse or drag & drop banner'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-neutral-400">
+                                16:9 landscape image recommended (PNG, JPG, WebP, GIF up to 10MB).
+                              </p>
+                            </div>
+
+                            {/* Banner Preview & Status */}
+                            {localConfig.embedBannerUrl ? (
+                              <div className="space-y-2 p-2.5 bg-neutral-900/70 border border-neutral-800 rounded-xl">
+                                <div className="relative w-full aspect-[16/9] max-h-36 rounded-lg overflow-hidden bg-neutral-950 border border-neutral-700">
+                                  <img
+                                    src={localConfig.embedBannerUrl}
+                                    alt="Banner preview"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLElement).style.display = 'none';
+                                    }}
+                                  />
+                                  {isUploadingBanner && (
+                                    <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
+                                      <RefreshCw className="w-5 h-5 text-indigo-400 animate-spin" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-between gap-2 text-xs pt-0.5">
+                                  <div className="flex items-center gap-1.5 text-white font-medium truncate">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                    <span className="truncate">{localConfig.customBannerName || 'Custom Banner Active'}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={handleResetBanner}
+                                    disabled={isUploadingBanner}
+                                    className="text-[11px] text-neutral-400 hover:text-rose-400 flex items-center gap-1 transition-colors px-2 py-1 rounded hover:bg-neutral-800 shrink-0"
+                                    title="Remove custom banner"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>Remove Banner</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-neutral-500 italic text-center py-1">
+                                No custom banner selected (blank by default).
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[11px] text-neutral-400">Direct Banner URL</label>
+                                {localConfig.embedBannerUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInputChange('embedBannerUrl', '')}
+                                    className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                              </div>
+                              <input
+                                type="url"
+                                value={localConfig.embedBannerUrl || ''}
+                                onChange={(e) => handleInputChange('embedBannerUrl', e.target.value)}
+                                placeholder="https://example.com/banner.png"
+                                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                              />
+                            </div>
+                            {localConfig.embedBannerUrl && (
+                              <div className="space-y-1.5 p-2 bg-neutral-900/60 border border-neutral-800/80 rounded-xl">
+                                <div className="w-full aspect-[16/9] max-h-28 rounded-md overflow-hidden bg-neutral-950 border border-neutral-700">
+                                  <img
+                                    src={localConfig.embedBannerUrl}
+                                    alt="Banner preview"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLElement).style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                                <div className="text-[10px] text-neutral-400 truncate font-mono">
+                                  {localConfig.embedBannerUrl}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1228,8 +1803,8 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                     <label className="text-xs text-neutral-400 block mb-1">Custom Message Text Prefix</label>
                     <input
                       type="text"
-                      value={localConfig.customMessage}
-                      onChange={(e) => handleInputChange('customMessage', e.target.value)}
+                      value={localConfig.customMessagePrefix ?? ''}
+                      onChange={(e) => handleInputChange('customMessagePrefix', e.target.value)}
                       placeholder="🎉 NEW DONATION RECEIVED! (Optional text above the embed)"
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
@@ -1271,8 +1846,8 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                       <label className="flex items-center gap-2 cursor-pointer text-neutral-300 text-xs">
                         <input
                           type="checkbox"
-                          checked={localConfig.auctionFulfillmentOnly !== false}
-                          onChange={(e) => handleInputChange('auctionFulfillmentOnly', e.target.checked)}
+                          checked={localConfig.onlyNotifyPrizeAuctions === true}
+                          onChange={(e) => handleInputChange('onlyNotifyPrizeAuctions', e.target.checked)}
                           className="rounded bg-neutral-950 border-neutral-800 text-amber-500 focus:ring-amber-500 w-4 h-4"
                         />
                         <span>Only alert if winner requires physical prize shipping or email delivery</span>
@@ -1396,7 +1971,36 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
               <span>Live Visual Embed Preview</span>
               <span className="text-[11px] text-neutral-500">Updates as you edit</span>
             </div>
-            <DiscordMessagePreview config={localConfig} />
+            <DiscordMessagePreview
+              config={localConfig}
+              sampleDonation={{
+                donorName: "Alex Rivera",
+                donorEmail: "alex.rivera@example.com",
+                amount: 50.0,
+                currency: "USD",
+                comment: "Keep up the amazing stream for this cause! Proud of this community! 🎉",
+                campaignName: campaignName?.trim() || "Charity Gaming Marathon 2026",
+                reward: {
+                  name: "Champion Signed Poster & T-Shirt",
+                  description: "Limited edition charity t-shirt with official stream signature.",
+                  quantity: 1,
+                  deliveryType: "shipping",
+                  donorEmail: "alex.rivera@example.com",
+                  shippingAddress: {
+                    recipientName: "Alex Rivera",
+                    addressLine1: "100 Maple Ave, Suite 3B",
+                    city: "Austin",
+                    region: "TX",
+                    postalCode: "78701",
+                    country: "United States",
+                  },
+                  customOptions: {
+                    "T-Shirt Size": "Adult L",
+                    "Notes": "Please leave package by front gate",
+                  },
+                },
+              }}
+            />
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800/80 rounded-xl p-4 text-xs text-neutral-400 space-y-2">
