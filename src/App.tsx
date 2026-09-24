@@ -47,6 +47,7 @@ export default function App() {
     mentionUserId: '',
     includeComment: true,
     includeCampaignDetails: true,
+    includeCampaignProgress: true,
     includeRewardDetails: true,
     includeDeliveryAddress: true,
     spoilerDeliveryInfo: true,

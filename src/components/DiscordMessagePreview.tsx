@@ -296,6 +296,28 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                         <span className="text-[#949ba4] font-semibold not-italic">Notes:</span> "{sampleAuction.specialInstructions}"
                       </div>
                     )}
+
+                    {config.includeCampaignDetails && sampleDonation.campaignName && (
+                      <div className="text-[12px] bg-[#1e1f22] p-2 rounded text-[#b5bac1]">
+                        <span className="text-[#949ba4] font-semibold">Campaign:</span> {sampleDonation.campaignName}
+                      </div>
+                    )}
+
+                    {config.includeCampaignProgress !== false && (
+                      <div className="text-[12px] bg-[#1e1f22] p-2 rounded text-[#b5bac1] border border-amber-500/20">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-amber-400 uppercase tracking-wider mb-1">
+                          <span>🏆 Campaign Progress</span>
+                          <span>72.5%</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs mb-1 font-medium">
+                          <span className="text-white">$3,625.00 raised</span>
+                          <span className="text-[#949ba4]">Goal: $5,000.00</span>
+                        </div>
+                        <div className="text-[11px] font-mono text-emerald-400">
+                          `[▓▓▓▓▓▓▓░░░]` 72.5%
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -335,6 +357,23 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                 {config.includeCampaignDetails && sampleDonation.campaignName && (
                   <div className="mb-3 text-[12px] bg-[#232428]/60 p-2 rounded text-[#b5bac1]">
                     <span className="text-[#949ba4] font-semibold">Campaign:</span> {sampleDonation.campaignName}
+                  </div>
+                )}
+
+                {/* Campaign Progress & Total Raised */}
+                {config.includeCampaignProgress !== false && (
+                  <div className="mb-3 text-[12px] bg-[#232428]/80 border border-amber-500/30 p-2.5 rounded-lg text-[#b5bac1]">
+                    <div className="text-amber-400 text-[11px] font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                      <span>🏆 Campaign Progress</span>
+                      <span>72.5%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mb-1 font-medium">
+                      <span className="text-white">$3,625.00 raised</span>
+                      <span className="text-[#949ba4]">Goal: $5,000.00</span>
+                    </div>
+                    <div className="text-[11px] font-mono text-emerald-400">
+                      `[▓▓▓▓▓▓▓░░░]` 72.5%
+                    </div>
                   </div>
                 )}
 

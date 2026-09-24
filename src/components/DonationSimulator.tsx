@@ -11,6 +11,8 @@ interface DonationSimulatorProps {
     currency?: string;
     comment?: string;
     campaignName?: string;
+    totalRaised?: number;
+    targetGoal?: number;
     reward?: ClaimedReward;
     auction?: AuctionWinnerInfo;
   }) => Promise<{ success: boolean; error?: string }>;
@@ -257,6 +259,8 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
           amount: Number(auctionBid) || 1,
           currency,
           campaignName: campaignName.trim(),
+          totalRaised: 3625,
+          targetGoal: 5000,
           auction: auctionObj,
         });
 
@@ -304,6 +308,8 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
           currency,
           comment: comment.trim(),
           campaignName: campaignName.trim(),
+          totalRaised: 3625,
+          targetGoal: 5000,
           reward: rewardObj,
         });
 

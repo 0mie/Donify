@@ -670,7 +670,20 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                       onChange={(e) => handleInputChange('includeCampaignDetails', e.target.checked)}
                       className="rounded bg-neutral-950 border-neutral-800 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                     />
-                    <span>Show campaign progress</span>
+                    <span>Show campaign name</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-neutral-300">
+                    <input
+                      type="checkbox"
+                      checked={localConfig.includeCampaignProgress !== false}
+                      onChange={(e) => handleInputChange('includeCampaignProgress', e.target.checked)}
+                      className="rounded bg-neutral-950 border-neutral-800 text-amber-500 focus:ring-amber-500 w-4 h-4"
+                    />
+                    <span className="flex items-center gap-1.5">
+                      <span>Show total amount raised &amp; campaign progress</span>
+                      <span className="text-[10px] bg-amber-950/80 text-amber-300 px-1.5 py-0.5 rounded border border-amber-800/50">🏆 Goal Bar</span>
+                    </span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer text-neutral-300">

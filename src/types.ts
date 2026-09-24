@@ -50,6 +50,7 @@ export interface DiscordConfig {
   mentionUserId?: string;
   includeComment: boolean;
   includeCampaignDetails: boolean;
+  includeCampaignProgress?: boolean;
   customMessagePrefix: string;
   includeRewardDetails: boolean;
   includeDeliveryAddress: boolean;

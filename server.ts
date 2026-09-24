@@ -56,6 +56,7 @@ const state: {
     mentionUserId: "",
     includeComment: true,
     includeCampaignDetails: true,
+    includeCampaignProgress: true,
     customMessagePrefix: "🎉 New donation received on Tiltify!",
     includeRewardDetails: true,
     includeDeliveryAddress: true,
@@ -298,6 +299,16 @@ function hexToDiscordColor(hex: string): number {
   return isNaN(num) ? 0x00d1b2 : num;
 }
 
+// Helper: Generate Discord-friendly ASCII Progress Bar
+function generateProgressBar(current: number, goal: number, barLength: number = 10): string {
+  if (!goal || goal <= 0) return "";
+  const ratio = Math.min(Math.max(current / goal, 0), 1);
+  const filled = Math.round(ratio * barLength);
+  const empty = barLength - filled;
+  const percent = ((current / goal) * 100).toFixed(1);
+  return `\`[${"▓".repeat(filled)}${"░".repeat(empty)}]\` **${percent}%**`;
+}
+
 // Core Function: Send Rich Donation Embed to Discord
 async function dispatchDiscordAlert(
   donation: DonationRecord,
@@ -476,14 +487,30 @@ async function dispatchDiscordAlert(
         });
       }
 
-      // Campaign & Cause details
+      // Campaign details
       if (config.includeCampaignDetails && (donation.campaignName || donation.causeName)) {
         const details: string[] = [];
         if (donation.campaignName) details.push(`**Campaign:** ${donation.campaignName}`);
         if (donation.causeName) details.push(`**Beneficiary:** ${donation.causeName}`);
         embedFields.push({
-          name: "🎯 Campaign Details",
+          name: "🎯 Campaign",
           value: details.join("\n"),
+          inline: true,
+        });
+      }
+
+      // Campaign Progress & Total Raised
+      if (config.includeCampaignProgress !== false && donation.totalRaised !== undefined) {
+        let progressVal = "";
+        if (donation.targetGoal && donation.targetGoal > 0) {
+          const bar = generateProgressBar(donation.totalRaised, donation.targetGoal, 10);
+          progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** raised of **${formatCurrency(donation.targetGoal, donation.currency)}** goal\n${bar}`;
+        } else {
+          progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** total raised so far!`;
+        }
+        embedFields.push({
+          name: "🏆 Campaign Total Raised",
+          value: progressVal,
           inline: false,
         });
       }
@@ -518,13 +545,25 @@ async function dispatchDiscordAlert(
         const details: string[] = [];
         if (donation.campaignName) details.push(`**Campaign:** ${donation.campaignName}`);
         if (donation.causeName) details.push(`**Cause:** ${donation.causeName}`);
-        if (donation.totalRaised !== undefined && donation.targetGoal) {
-          const percent = Math.min(100, Math.round((donation.totalRaised / donation.targetGoal) * 100));
-          details.push(`**Progress:** ${formatCurrency(donation.totalRaised, donation.currency)} / ${formatCurrency(donation.targetGoal, donation.currency)} (${percent}%)`);
+        embedFields.push({
+          name: "🎯 Campaign",
+          value: details.join("\n"),
+          inline: true,
+        });
+      }
+
+      // Campaign Progress & Total Raised
+      if (config.includeCampaignProgress !== false && donation.totalRaised !== undefined) {
+        let progressVal = "";
+        if (donation.targetGoal && donation.targetGoal > 0) {
+          const bar = generateProgressBar(donation.totalRaised, donation.targetGoal, 10);
+          progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** raised of **${formatCurrency(donation.targetGoal, donation.currency)}** goal\n${bar}`;
+        } else {
+          progressVal = `**${formatCurrency(donation.totalRaised, donation.currency)}** total raised so far!`;
         }
         embedFields.push({
-          name: "🎯 Campaign Details",
-          value: details.join("\n"),
+          name: "🏆 Campaign Total Raised",
+          value: progressVal,
           inline: false,
         });
       }
@@ -909,6 +948,85 @@ async function refreshCampaignRewards(campaignId: string): Promise<void> {
   }
 }
 
+interface CampaignSummary {
+  id: string;
+  name?: string;
+  totalRaised?: number;
+  targetGoal?: number;
+  currency?: string;
+  fetchedAt: number;
+}
+let cachedCampaignSummary: CampaignSummary | null = null;
+
+// Helper to query Tiltify v5 API for campaign total amount raised & goal progress
+async function fetchLiveCampaignSummary(campaignId?: string): Promise<{
+  totalRaised?: number;
+  targetGoal?: number;
+  campaignName?: string;
+  currency?: string;
+} | null> {
+  const cid = (campaignId || state.tiltify.campaignId || "").trim();
+  if (!cid) {
+    if (state.botStatus.totalAmountProcessed > 0) {
+      return { totalRaised: state.botStatus.totalAmountProcessed };
+    }
+    return null;
+  }
+
+  if (
+    cachedCampaignSummary &&
+    cachedCampaignSummary.id === cid &&
+    Date.now() - cachedCampaignSummary.fetchedAt < 10000
+  ) {
+    return cachedCampaignSummary;
+  }
+
+  // Tiltify v5 campaign endpoint
+  try {
+    const url = `https://v5api.tiltify.com/api/public/campaigns/${encodeURIComponent(cid)}`;
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (state.tiltify.apiToken) {
+      headers["Authorization"] = `Bearer ${state.tiltify.apiToken.trim()}`;
+    }
+
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      const camp = data.data || data;
+      const raisedVal =
+        camp.amount_raised?.value ??
+        camp.total_amount_raised?.value ??
+        camp.amount_raised ??
+        camp.total_amount_raised;
+      const goalVal = camp.goal?.value ?? camp.goal;
+      const currency = camp.amount_raised?.currency ?? camp.goal?.currency ?? "USD";
+      const totalRaised = typeof raisedVal === "number" ? raisedVal : parseFloat(raisedVal);
+      const targetGoal = typeof goalVal === "number" ? goalVal : parseFloat(goalVal);
+
+      cachedCampaignSummary = {
+        id: cid,
+        name: camp.name || camp.slug,
+        totalRaised: !isNaN(totalRaised) ? totalRaised : undefined,
+        targetGoal: !isNaN(targetGoal) ? targetGoal : undefined,
+        currency,
+        fetchedAt: Date.now(),
+      };
+      return cachedCampaignSummary;
+    }
+  } catch (err) {
+    // Ignore error silently
+  }
+
+  if (state.botStatus.totalAmountProcessed > 0) {
+    return {
+      totalRaised: state.botStatus.totalAmountProcessed,
+      campaignName: state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : undefined,
+    };
+  }
+
+  return null;
+}
+
 // Helper to extract ClaimedReward and delivery details from Tiltify donation payloads
 function extractRewardAndDelivery(
   raw: any,
@@ -1263,6 +1381,7 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
       : [];
 
     let newCount = 0;
+    const campaignSummary = await fetchLiveCampaignSummary(campaignId);
 
     for (const raw of rawDonations) {
       const donationId = String(raw.id || raw.public_id || `tilt-${Date.now()}`);
@@ -1290,8 +1409,10 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
           currency: currencyVal,
           comment: raw.comment || raw.message || undefined,
           reward: reward,
-          campaignName: raw.campaign?.name || `Campaign #${campaignId}`,
+          campaignName: campaignSummary?.campaignName || raw.campaign?.name || `Campaign #${campaignId}`,
           campaignId: campaignId,
+          totalRaised: campaignSummary?.totalRaised,
+          targetGoal: campaignSummary?.targetGoal,
           receivedAt: raw.created_at || raw.completed_at || new Date().toISOString(),
           source: "poll",
           discordStatus: "pending",
@@ -1747,6 +1868,8 @@ app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) =
       currency: auc.currency || req.body.currency || "USD",
       auction: auc,
       campaignName: req.body.campaignName || (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : "Charity Stream 2026"),
+      totalRaised: typeof req.body.totalRaised === "number" ? req.body.totalRaised : 3625.0,
+      targetGoal: typeof req.body.targetGoal === "number" ? req.body.targetGoal : 5000.0,
       receivedAt: new Date().toISOString(),
       source: "simulator",
       discordStatus: "pending",
@@ -1761,6 +1884,8 @@ app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) =
       comment: req.body.comment || "This is a test notification from the Tiltify Discord Bot! Everything is configured properly. 🚀",
       campaignName: req.body.campaignName || (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : "Charity Stream 2026"),
       reward: req.body.reward || undefined,
+      totalRaised: typeof req.body.totalRaised === "number" ? req.body.totalRaised : 3625.0,
+      targetGoal: typeof req.body.targetGoal === "number" ? req.body.targetGoal : 5000.0,
       receivedAt: new Date().toISOString(),
       source: "simulator",
       discordStatus: "pending",
@@ -1899,6 +2024,37 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
     }
 
     seenSet.add(donationId);
+
+    // Extract or fetch campaign total amount raised & goal progress
+    const campObj = raw?.campaign || payload?.campaign || payload?.data?.campaign;
+    if (campObj) {
+      const raised =
+        campObj.amount_raised?.value ??
+        campObj.total_amount_raised?.value ??
+        campObj.amount_raised ??
+        campObj.total_amount_raised;
+      if (raised !== undefined) donation.totalRaised = parseFloat(String(raised));
+      const goal = campObj.goal?.value ?? campObj.goal;
+      if (goal !== undefined) donation.targetGoal = parseFloat(String(goal));
+      if (campObj.name && (!donation.campaignName || donation.campaignName === "Tiltify Campaign")) {
+        donation.campaignName = campObj.name;
+      }
+    }
+
+    if (donation.totalRaised === undefined) {
+      const summary = await fetchLiveCampaignSummary(donation.campaignId || state.tiltify.campaignId);
+      if (summary) {
+        if (summary.totalRaised !== undefined) donation.totalRaised = summary.totalRaised;
+        if (summary.targetGoal !== undefined) donation.targetGoal = summary.targetGoal;
+        if (summary.campaignName && (!donation.campaignName || donation.campaignName === "Tiltify Campaign")) {
+          donation.campaignName = summary.campaignName;
+        }
+      }
+    }
+
+    if (donation.totalRaised === undefined) {
+      donation.totalRaised = state.botStatus.totalAmountProcessed + donation.amount;
+    }
 
     // Send Discord Alert
     const dispatchResult = await dispatchDiscordAlert(donation, state.discord);
