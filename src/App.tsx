@@ -51,6 +51,15 @@ export default function App() {
     includeRewardDetails: true,
     includeDeliveryAddress: true,
     spoilerDeliveryInfo: true,
+    embedDensity: 'comfortable',
+    embedLayout: 'modern',
+    embedTitleTemplate: '🎉 New Donation: {amount}!',
+    embedDescriptionTemplate: '**{donor}** contributed to the campaign!',
+    embedThumbnailUrl: '',
+    embedBannerUrl: '',
+    showEmbedTimestamp: true,
+    progressBarCharStyle: 'blocks',
+    auctionTitleTemplate: '🏆 AUCTION HOUSE: Auction Ended & Finalized!',
     customMessagePrefix: '🎉 New donation received on Tiltify!',
     enableAuctionAlerts: true,
     auctionMessagePrefix: '🔨 **AUCTION ENDED!** An auction from the Tiltify Auction House has concluded.',
@@ -96,6 +105,7 @@ export default function App() {
 
   const authFetch = async (url: string, options: RequestInit = {}) => {
     const headers = {
+      Accept: 'application/json',
       ...getAuthHeaders(),
       ...(options.headers || {}),
     };
@@ -111,7 +121,8 @@ export default function App() {
   const fetchConfigAndStatus = async () => {
     try {
       const res = await authFetch('/api/config');
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         let serverDiscord = data.discord || {};
         let serverTiltify = data.tiltify || {};
@@ -148,7 +159,8 @@ export default function App() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ discord: serverDiscord, tiltify: serverTiltify }),
             });
-            if (syncRes.ok) {
+            const syncType = syncRes.headers.get('content-type') || '';
+            if (syncRes.ok && syncType.includes('application/json')) {
               const syncData = await syncRes.json();
               if (syncData.discord) serverDiscord = syncData.discord;
               if (syncData.tiltify) serverTiltify = syncData.tiltify;
@@ -167,42 +179,52 @@ export default function App() {
         saveLocalConfigBackup(serverDiscord, serverTiltify);
       }
     } catch (err) {
-      console.error('Failed to load server config:', err);
+      console.warn('Failed to load server config:', err);
     }
   };
 
   // Fetch live polling status only (without touching active form configurations)
   const fetchStatusOnly = async () => {
     try {
-      const res = await fetch('/api/status');
-      if (res.ok) {
+      const res = await fetch('/api/status', {
+        headers: { Accept: 'application/json' },
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         if (data.status) setStatus(data.status);
       }
     } catch (err) {
-      console.error('Failed to load status:', err);
+      console.warn('Failed to load status:', err);
     }
   };
 
   // Fetch donations history
   const fetchDonations = async () => {
     try {
-      const res = await fetch('/api/donations');
-      if (res.ok) {
+      const res = await fetch('/api/donations', {
+        headers: { Accept: 'application/json' },
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         setDonations(data.donations || []);
       }
     } catch (err) {
-      console.error('Failed to load donations:', err);
+      console.warn('Failed to load donations:', err);
     }
   };
 
   const checkAuthAndLoad = async () => {
     try {
       const res = await fetch('/api/auth/status', {
-        headers: getAuthHeaders(),
+        headers: {
+          Accept: 'application/json',
+          ...getAuthHeaders(),
+        },
       });
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const authData = await res.json();
         setHasPassword(authData.hasPassword);
         if (authData.hasPassword && !authData.authenticated) {

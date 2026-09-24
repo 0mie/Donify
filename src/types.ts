@@ -35,6 +35,9 @@ export interface AuctionWinnerInfo {
   endedAt?: string;
 }
 
+export type EmbedLayoutMode = 'modern' | 'compact' | 'minimal';
+export type ProgressBarCharStyle = 'blocks' | 'line' | 'stars' | 'percentage';
+
 export interface DiscordConfig {
   mode: 'webhook' | 'bot';
   webhookUrl: string;
@@ -55,12 +58,21 @@ export interface DiscordConfig {
   includeRewardDetails: boolean;
   includeDeliveryAddress: boolean;
   spoilerDeliveryInfo: boolean;
+  embedDensity?: 'comfortable' | 'compact';
   enableAuctionAlerts: boolean;
   auctionMessagePrefix: string;
   onlyNotifyPrizeAuctions: boolean;
   footerText?: string;
   footerIconUrl?: string;
   auctionFooterText?: string;
+  embedLayout?: EmbedLayoutMode;
+  embedTitleTemplate?: string;
+  embedDescriptionTemplate?: string;
+  embedThumbnailUrl?: string;
+  embedBannerUrl?: string;
+  showEmbedTimestamp?: boolean;
+  progressBarCharStyle?: ProgressBarCharStyle;
+  auctionTitleTemplate?: string;
 }
 
 export interface TiltifyConfig {

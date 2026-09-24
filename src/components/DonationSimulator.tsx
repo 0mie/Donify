@@ -58,6 +58,27 @@ const DONATION_PRESETS = [
     },
   },
   {
+    name: '💻 Digital Reward: VIP Game Key',
+    donor: 'CyberKnight',
+    email: 'cyberknight@example.com',
+    amount: 50.0,
+    currency: 'USD',
+    comment: 'Claimed the digital VIP steam key! Sending love to the stream! 🎮⚡',
+    reward: {
+      name: 'VIP Beta Steam Key + Supporter Role',
+      description: 'Electronic digital key delivered directly via email.',
+      amount: 50.0,
+      quantity: 1,
+      deliveryType: 'digital' as const,
+      donorEmail: 'cyberknight@example.com',
+      shippingAddress: undefined,
+      customOptions: {
+        'Platform': 'Steam (PC)',
+        'Discord Tag': 'CyberKnight#1337',
+      },
+    },
+  },
+  {
     name: '💖 Hype Squad',
     donor: 'NeonRider99',
     email: 'neon@example.com',
@@ -196,6 +217,13 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
         setRegion(p.reward.shippingAddress.region || '');
         setPostalCode(p.reward.shippingAddress.postalCode || '');
         setCountry(p.reward.shippingAddress.country || 'United States');
+      } else {
+        setRecipientName(p.donor);
+        setAddressLine1('');
+        setCity('');
+        setRegion('');
+        setPostalCode('');
+        setCountry('');
       }
     } else {
       setIncludeReward(false);
@@ -799,6 +827,30 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
                             className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200"
                           />
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {deliveryType === 'digital' && (
+                    <div className="bg-teal-950/40 border border-teal-500/30 p-3 rounded-lg text-xs space-y-2">
+                      <div className="flex items-center gap-1.5 text-teal-300 font-semibold text-[11px]">
+                        <Mail className="w-3.5 h-3.5 text-teal-400" />
+                        <span>💻 Digital / Electronic Delivery (No Shipping Address)</span>
+                      </div>
+                      <p className="text-neutral-300 text-[11px] leading-relaxed">
+                        Because this reward is digital, physical address information is omitted. In Discord, the recipient email will be displayed in <strong className="text-white font-bold">bold</strong> so fulfillment doesn't get missed.
+                      </p>
+                      <div>
+                        <label className="text-[11px] text-neutral-400 block mb-1">
+                          Recipient Delivery Email <span className="text-teal-400 font-semibold">(Required)</span>
+                        </label>
+                        <input
+                          type="email"
+                          value={donorEmail}
+                          onChange={(e) => setDonorEmail(e.target.value)}
+                          placeholder="recipient@example.com"
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        />
                       </div>
                     </div>
                   )}

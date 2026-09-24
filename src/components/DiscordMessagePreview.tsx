@@ -99,6 +99,50 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
     ? (config.auctionMessagePrefix || "🔨 **AUCTION ENDED!** An auction from the Tiltify Auction House has concluded.")
     : config.customMessagePrefix;
 
+  // Template interpolator
+  const interpolate = (tpl: string | undefined, fallback: string, vars: Record<string, string>) => {
+    if (!tpl || !tpl.trim()) return fallback;
+    return tpl.replace(/\{(\w+)\}/g, (_, key) => (vars[key] !== undefined ? vars[key] : `{${key}}`));
+  };
+
+  const donationTitle = interpolate(
+    config.embedTitleTemplate,
+    `🎉 New Donation: ${formattedAmount}!`,
+    {
+      amount: formattedAmount,
+      donor: sampleDonation.donorName,
+      campaign: sampleDonation.campaignName,
+    }
+  );
+
+  const donationDesc = interpolate(
+    config.embedDescriptionTemplate,
+    `**${sampleDonation.donorName}** contributed to the campaign!`,
+    {
+      amount: formattedAmount,
+      donor: sampleDonation.donorName,
+      campaign: sampleDonation.campaignName,
+    }
+  );
+
+  const auctionTitle = interpolate(
+    config.auctionTitleTemplate,
+    `🏆 AUCTION HOUSE: Auction Ended & Finalized!`,
+    {
+      amount: formattedAmount,
+      winner: sampleAuction.winnerName,
+      item: sampleAuction.itemTitle,
+      campaign: sampleDonation.campaignName,
+    }
+  );
+
+  const renderProgressBarText = (charStyle?: string) => {
+    if (charStyle === "percentage") return "72.5% reached ($3,625 / $5,000)";
+    if (charStyle === "line") return "`[━━━━━━━───]` 72.5%";
+    if (charStyle === "stars") return "`[★★★★★★★☆☆☆]` 72.5%";
+    return "`[▓▓▓▓▓▓▓░░░]` 72.5%";
+  };
+
   return (
     <div className="bg-[#313338] text-[#dbdee1] rounded-xl p-4 font-sans text-sm border border-[#232428] shadow-inner select-none">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-[#949ba4] mb-3 flex items-center justify-between flex-wrap gap-2">
@@ -173,14 +217,28 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
 
           {/* Discord Embed */}
           <div
-            className="rounded-r-lg bg-[#2b2d31] p-3.5 max-w-lg border-l-4 shadow"
+            className="rounded-r-lg bg-[#2b2d31] p-3.5 max-w-lg border-l-4 shadow relative"
             style={{ borderLeftColor: embedColor }}
           >
+            {/* Optional Embed Thumbnail in upper right */}
+            {config.embedThumbnailUrl?.trim() && (
+              <div className="absolute top-3.5 right-3.5 w-16 h-16 rounded overflow-hidden bg-[#1e1f22] border border-neutral-700/50 shrink-0">
+                <img
+                  src={config.embedThumbnailUrl.trim()}
+                  alt="Embed Thumbnail"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
+
             {isAuction ? (
               /* Auction Ended Embed */
-              <div>
+              <div className={config.embedThumbnailUrl?.trim() ? "pr-20" : ""}>
                 <div className="font-bold text-amber-400 text-[15px] mb-1 flex items-center gap-1.5">
-                  🔨 Auction Ended: {sampleAuction.itemTitle}!
+                  {auctionTitle}
                 </div>
                 <div className="text-[13px] text-[#dbdee1] mb-3">
                   Winning bid of <strong className="text-white">{formattedAmount}</strong> by{' '}
@@ -212,53 +270,90 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
 
                 {/* Fulfillment Details for physical / email prize */}
                 <div className="mb-3 bg-[#232428]/90 border border-indigo-500/40 p-2.5 rounded-lg text-[12px]">
-                  <div className="text-indigo-400 text-[11px] font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                    <span>🚚 Winner Fulfillment Information</span>
+                  <div className="text-indigo-400 text-[11px] font-bold uppercase tracking-wider mb-2 flex items-center justify-between">
+                    <span>
+                      {sampleAuction.prizeType === 'email'
+                        ? '📧 Digital Prize Delivery'
+                        : sampleAuction.prizeType === 'physical'
+                        ? '📦 Physical Prize Shipping'
+                        : '🚚 Winner Fulfillment Information'}
+                    </span>
                     <span className="text-[10px] bg-indigo-950/90 text-indigo-300 px-1.5 py-0.5 rounded font-mono">
-                      Physical + Digital Delivery
+                      {sampleAuction.prizeType === 'email'
+                        ? 'Digital Delivery'
+                        : sampleAuction.prizeType === 'physical'
+                        ? 'Physical Shipping'
+                        : 'Physical + Digital'}
                     </span>
                   </div>
 
                   <div className="space-y-2 text-[#dbdee1]">
-                    {/* Winner contact */}
-                    <div className="bg-[#1e1f22] p-2 rounded">
-                      <div className="text-[11px] text-[#949ba4] font-semibold mb-0.5">Winner Contact:</div>
-                      <div className="text-white font-medium">{sampleAuction.winnerName}</div>
-                      {sampleAuction.winnerEmail && (
-                        <div className="text-indigo-300 font-mono text-[11px] mt-0.5">
-                          📧 {sampleAuction.winnerEmail}
+                    {sampleAuction.prizeType === 'email' ? (
+                      /* Pure Digital Delivery Block */
+                      <div className="bg-[#1e1f22] p-2.5 rounded-lg space-y-1.5 border border-teal-500/20">
+                        <div>
+                          <span className="text-[#949ba4]">Winner: </span>
+                          <span className="text-white font-semibold">{sampleAuction.winnerName}</span>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Email fulfillment action notice */}
-                    <div className="bg-teal-950/40 border border-teal-800/40 p-2 rounded text-[11px] text-teal-200">
-                      <strong>✉️ Digital / Email Prize Action:</strong> Send digital voucher, code, or confirmation email to{' '}
-                      <span className="font-mono text-white underline">{sampleAuction.winnerEmail}</span>.
-                    </div>
-
-                    {/* Physical Prize Shipping Address */}
-                    {sampleAuction.shippingAddress && (
-                      <div>
-                        <div className="text-[11px] text-[#949ba4] mb-1 font-semibold flex items-center justify-between">
-                          <span>📦 Physical Prize Shipping Address:</span>
-                          {config.spoilerDeliveryInfo && (
-                            <span className="text-[10px] text-amber-400/80">Spoiler protected</span>
+                        <div>
+                          <span className="text-[#949ba4]">Send To Email: </span>
+                          <span className="font-bold text-teal-300 font-mono text-xs bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800/60 ml-1">
+                            {sampleAuction.winnerEmail || 'Not provided'}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Physical or Both */
+                      <>
+                        <div className="bg-[#1e1f22] p-2 rounded">
+                          <div className="text-[11px] text-[#949ba4] font-semibold mb-0.5">Winner Contact:</div>
+                          <div className="text-white font-medium">{sampleAuction.winnerName}</div>
+                          {sampleAuction.winnerEmail && (
+                            <div className="text-indigo-300 font-mono text-[11px] mt-0.5">
+                              📧 {sampleAuction.winnerEmail}
+                            </div>
                           )}
                         </div>
 
-                        {config.spoilerDeliveryInfo ? (
-                          <div
-                            onClick={() => setSpoilerRevealed(!spoilerRevealed)}
-                            className={`cursor-pointer px-2 py-1.5 rounded text-xs transition-colors font-mono ${
-                              spoilerRevealed
-                                ? 'bg-[#1e1f22] text-[#dbdee1] border border-neutral-700'
-                                : 'bg-[#1e1f22] text-[#1e1f22] hover:text-[#4e5058] select-none border border-neutral-800'
-                            }`}
-                            title={spoilerRevealed ? 'Click to hide' : 'Click to reveal spoiler'}
-                          >
-                            {spoilerRevealed ? (
-                              <div>
+                        {/* Physical Prize Shipping Address */}
+                        {sampleAuction.shippingAddress && (
+                          <div>
+                            <div className="text-[11px] text-[#949ba4] mb-1 font-semibold flex items-center justify-between">
+                              <span>📦 Physical Prize Shipping Address:</span>
+                              {config.spoilerDeliveryInfo && (
+                                <span className="text-[10px] text-amber-400/80">Spoiler protected</span>
+                              )}
+                            </div>
+
+                            {config.spoilerDeliveryInfo ? (
+                              <div
+                                onClick={() => setSpoilerRevealed(!spoilerRevealed)}
+                                className={`cursor-pointer px-2 py-1.5 rounded text-xs transition-colors font-mono ${
+                                  spoilerRevealed
+                                    ? 'bg-[#1e1f22] text-[#dbdee1] border border-neutral-700'
+                                    : 'bg-[#1e1f22] text-[#1e1f22] hover:text-[#4e5058] select-none border border-neutral-800'
+                                }`}
+                                title={spoilerRevealed ? 'Click to hide' : 'Click to reveal spoiler'}
+                              >
+                                {spoilerRevealed ? (
+                                  <div>
+                                    <div>{sampleAuction.shippingAddress.recipientName}</div>
+                                    <div>{sampleAuction.shippingAddress.addressLine1}</div>
+                                    {sampleAuction.shippingAddress.addressLine2 && (
+                                      <div>{sampleAuction.shippingAddress.addressLine2}</div>
+                                    )}
+                                    <div>
+                                      {sampleAuction.shippingAddress.city}, {sampleAuction.shippingAddress.region}{' '}
+                                      {sampleAuction.shippingAddress.postalCode}
+                                    </div>
+                                    <div>{sampleAuction.shippingAddress.country}</div>
+                                  </div>
+                                ) : (
+                                  '██████████████████████████████████ (Click to reveal shipping address)'
+                                )}
+                              </div>
+                            ) : (
+                              <div className="bg-[#1e1f22] p-2 rounded font-mono text-[11px] text-neutral-300">
                                 <div>{sampleAuction.shippingAddress.recipientName}</div>
                                 <div>{sampleAuction.shippingAddress.addressLine1}</div>
                                 {sampleAuction.shippingAddress.addressLine2 && (
@@ -270,25 +365,17 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                                 </div>
                                 <div>{sampleAuction.shippingAddress.country}</div>
                               </div>
-                            ) : (
-                              '██████████████████████████████████ (Click to reveal shipping address)'
                             )}
-                          </div>
-                        ) : (
-                          <div className="bg-[#1e1f22] p-2 rounded font-mono text-[11px] text-neutral-300">
-                            <div>{sampleAuction.shippingAddress.recipientName}</div>
-                            <div>{sampleAuction.shippingAddress.addressLine1}</div>
-                            {sampleAuction.shippingAddress.addressLine2 && (
-                              <div>{sampleAuction.shippingAddress.addressLine2}</div>
-                            )}
-                            <div>
-                              {sampleAuction.shippingAddress.city}, {sampleAuction.shippingAddress.region}{' '}
-                              {sampleAuction.shippingAddress.postalCode}
-                            </div>
-                            <div>{sampleAuction.shippingAddress.country}</div>
                           </div>
                         )}
-                      </div>
+
+                        {sampleAuction.prizeType === 'both' && sampleAuction.winnerEmail && (
+                          <div className="bg-teal-950/40 border border-teal-800/40 p-2 rounded text-[11px] text-teal-200">
+                            <strong>📧 Digital Redemption Pass:</strong> Send digital voucher or keys to{' '}
+                            <span className="font-bold text-teal-300 underline font-mono">{sampleAuction.winnerEmail}</span>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {sampleAuction.specialInstructions && (
@@ -323,12 +410,12 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
               </div>
             ) : (
               /* Standard Donation Embed */
-              <div>
+              <div className={config.embedThumbnailUrl?.trim() ? "pr-20" : ""}>
                 <div className="font-bold text-white text-[15px] mb-1 flex items-center gap-1.5">
-                  🎉 New Donation: {formattedAmount}!
+                  {donationTitle}
                 </div>
                 <div className="text-[13px] text-[#dbdee1] mb-3">
-                  <span className="font-semibold text-white">{sampleDonation.donorName}</span> contributed to the campaign!
+                  {donationDesc}
                 </div>
 
                 {/* Embed Fields Grid */}
@@ -361,7 +448,7 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                 )}
 
                 {/* Campaign Progress & Total Raised */}
-                {config.includeCampaignProgress !== false && (
+                {config.includeCampaignProgress !== false && config.embedLayout !== 'minimal' && (
                   <div className="mb-3 text-[12px] bg-[#232428]/80 border border-amber-500/30 p-2.5 rounded-lg text-[#b5bac1]">
                     <div className="text-amber-400 text-[11px] font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
                       <span>🏆 Campaign Progress</span>
@@ -372,7 +459,7 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                       <span className="text-[#949ba4]">Goal: $5,000.00</span>
                     </div>
                     <div className="text-[11px] font-mono text-emerald-400">
-                      `[▓▓▓▓▓▓▓░░░]` 72.5%
+                      {renderProgressBarText(config.progressBarCharStyle)}
                     </div>
                   </div>
                 )}
@@ -398,57 +485,85 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                 {/* Delivery & Fulfillment Details Block */}
                 {config.includeDeliveryAddress !== false && reward && (
                   <div className="mb-3 bg-[#232428]/80 border border-indigo-500/30 p-2.5 rounded-lg text-[12px]">
-                    <div className="text-indigo-400 text-[11px] font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                      <span>📦 Delivery & Fulfillment Details</span>
-                      <span className="text-[10px] bg-indigo-950/80 text-indigo-300 px-1.5 py-0.5 rounded">
-                        {reward.deliveryType === 'shipping' ? 'Physical Shipping' : 'Digital / Virtual'}
+                    <div className="text-indigo-400 text-[11px] font-bold uppercase tracking-wider mb-2 flex items-center justify-between">
+                      <span>
+                        {reward.deliveryType === 'digital'
+                          ? '📧 Digital Reward Delivery'
+                          : '📦 Physical Shipping Address'}
+                      </span>
+                      <span className="text-[10px] bg-indigo-950/80 text-indigo-300 px-1.5 py-0.5 rounded font-mono">
+                        {reward.deliveryType === 'digital' ? 'Digital Delivery' : 'Physical Shipping'}
                       </span>
                     </div>
 
-                    <div className="space-y-1.5 text-[#dbdee1]">
-                      <div>
-                        <span className="text-[#949ba4]">Recipient: </span>
-                        <span className="font-medium text-white">
-                          {reward.shippingAddress?.recipientName || sampleDonation.donorName}
-                        </span>
-                        {(reward.donorEmail || sampleDonation.donorEmail) && (
-                          <span className="text-[#949ba4] font-mono text-[11px] ml-1.5">
-                            &lt;{reward.donorEmail || sampleDonation.donorEmail}&gt;
-                          </span>
-                        )}
-                      </div>
-
-                      {reward.shippingAddress && (
-                        <div className="pt-1">
-                          <div className="text-[11px] text-[#949ba4] mb-0.5 font-semibold">
-                            Shipping Address {config.spoilerDeliveryInfo ? '(Spoiler protected):' : ':'}
+                    <div className="space-y-2 text-[#dbdee1]">
+                      {reward.deliveryType === 'digital' ? (
+                        /* Pure digital delivery */
+                        <div className="bg-[#1e1f22] p-2.5 rounded-lg space-y-1.5 border border-teal-500/20">
+                          <div>
+                            <span className="text-[#949ba4]">Recipient: </span>
+                            <span className="font-semibold text-white">
+                              {reward.shippingAddress?.recipientName || sampleDonation.donorName}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[#949ba4]">Send To Email: </span>
+                            <span className="font-bold text-teal-300 font-mono text-xs bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800/60 ml-1">
+                              {reward.donorEmail || sampleDonation.donorEmail || 'Not provided'}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Physical shipping */
+                        <>
+                          <div className="bg-[#1e1f22] p-2 rounded">
+                            <span className="text-[#949ba4]">Recipient: </span>
+                            <span className="font-medium text-white">
+                              {reward.shippingAddress?.recipientName || sampleDonation.donorName}
+                            </span>
+                            {(reward.donorEmail || sampleDonation.donorEmail) && (
+                              <span className="text-[#949ba4] font-mono text-[11px] ml-1.5">
+                                • Contact: {reward.donorEmail || sampleDonation.donorEmail}
+                              </span>
+                            )}
                           </div>
 
-                          {config.spoilerDeliveryInfo ? (
-                            <div
-                              onClick={() => setSpoilerRevealed(!spoilerRevealed)}
-                              className={`cursor-pointer px-2 py-1 rounded text-xs transition-colors ${
-                                spoilerRevealed
-                                  ? 'bg-[#1e1f22] text-[#dbdee1] border border-neutral-700'
-                                  : 'bg-[#1e1f22] text-[#1e1f22] hover:text-[#4e5058] select-none'
-                              }`}
-                              title={spoilerRevealed ? 'Click to hide' : 'Click to reveal spoiler'}
-                            >
-                              {spoilerRevealed
-                                ? `${reward.shippingAddress.addressLine1}, ${reward.shippingAddress.city}, ${reward.shippingAddress.region} ${reward.shippingAddress.postalCode}, ${reward.shippingAddress.country}`
-                                : '██████████████████████████████ (Click to reveal)'}
-                            </div>
-                          ) : (
-                            <div className="bg-[#1e1f22] p-1.5 rounded font-mono text-[11px] text-neutral-300">
-                              <div>{reward.shippingAddress.addressLine1}</div>
-                              <div>
-                                {reward.shippingAddress.city}, {reward.shippingAddress.region}{' '}
-                                {reward.shippingAddress.postalCode}
+                          {reward.shippingAddress && (
+                            <div className="pt-0.5">
+                              <div className="text-[11px] text-[#949ba4] mb-1 font-semibold flex items-center justify-between">
+                                <span>Shipping Address:</span>
+                                {config.spoilerDeliveryInfo && (
+                                  <span className="text-[10px] text-amber-400/80">Spoiler protected</span>
+                                )}
                               </div>
-                              <div>{reward.shippingAddress.country}</div>
+
+                              {config.spoilerDeliveryInfo ? (
+                                <div
+                                  onClick={() => setSpoilerRevealed(!spoilerRevealed)}
+                                  className={`cursor-pointer px-2 py-1 rounded text-xs transition-colors ${
+                                    spoilerRevealed
+                                      ? 'bg-[#1e1f22] text-[#dbdee1] border border-neutral-700'
+                                      : 'bg-[#1e1f22] text-[#1e1f22] hover:text-[#4e5058] select-none border border-neutral-800'
+                                  }`}
+                                  title={spoilerRevealed ? 'Click to hide' : 'Click to reveal spoiler'}
+                                >
+                                  {spoilerRevealed
+                                    ? `${reward.shippingAddress.addressLine1}, ${reward.shippingAddress.city}, ${reward.shippingAddress.region} ${reward.shippingAddress.postalCode}, ${reward.shippingAddress.country}`
+                                    : '██████████████████████████████ (Click to reveal)'}
+                                </div>
+                              ) : (
+                                <div className="bg-[#1e1f22] p-1.5 rounded font-mono text-[11px] text-neutral-300">
+                                  <div>{reward.shippingAddress.addressLine1}</div>
+                                  <div>
+                                    {reward.shippingAddress.city}, {reward.shippingAddress.region}{' '}
+                                    {reward.shippingAddress.postalCode}
+                                  </div>
+                                  <div>{reward.shippingAddress.country}</div>
+                                </div>
+                              )}
                             </div>
                           )}
-                        </div>
+                        </>
                       )}
 
                       {reward.customOptions && typeof reward.customOptions === 'object' && (
@@ -467,6 +582,20 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
               </div>
             )}
 
+            {/* Optional Banner Image */}
+            {config.embedBannerUrl?.trim() && (
+              <div className="mt-3 rounded-lg overflow-hidden border border-neutral-700/40 bg-[#1e1f22]">
+                <img
+                  src={config.embedBannerUrl.trim()}
+                  alt="Embed Banner"
+                  className="w-full max-h-52 object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
+
             {/* Footer */}
             <div className="flex items-center gap-1.5 text-[11px] text-[#949ba4] mt-2 pt-2 border-t border-[#35373c]">
               <img
@@ -480,7 +609,8 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
               <span>
                 {isAuction
                   ? (config.auctionFooterText?.trim() || 'Tiltify Auction House • Winner Fulfillment')
-                  : (config.footerText?.trim() || 'Tiltify Donation Alerts')} • Today at 12:00 PM
+                  : (config.footerText?.trim() || 'Tiltify Donation Alerts')}
+                {config.showEmbedTimestamp !== false && ' • Today at 12:00 PM'}
               </span>
             </div>
           </div>
