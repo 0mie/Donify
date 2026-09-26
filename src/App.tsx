@@ -4,10 +4,11 @@ import { DiscordConfigCard } from './components/DiscordConfigCard';
 import { TiltifyConfigCard } from './components/TiltifyConfigCard';
 import { DonationSimulator } from './components/DonationSimulator';
 import { LiveFeed } from './components/LiveFeed';
+import { PrizeShippingCenter } from './components/PrizeShippingCenter';
 import { SetupGuideModal } from './components/SetupGuideModal';
 import { AdminLockModal } from './components/AdminLockModal';
 import { DiscordConfig, TiltifyConfig, DonationRecord, BotStatus, ClaimedReward, AuctionWinnerInfo } from './types';
-import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw } from 'lucide-react';
+import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw, Package } from 'lucide-react';
 
 const CONFIG_STORAGE_KEY = 'tiltify_bot_saved_config_v1';
 
@@ -29,7 +30,7 @@ function getLocalConfigBackup(): { discord?: Partial<DiscordConfig>; tiltify?: P
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'feed' | 'simulator'>('discord');
+  const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'prizes' | 'feed' | 'simulator'>('discord');
   const [guideOpen, setGuideOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -289,11 +290,16 @@ export default function App() {
   }, []);
 
   // Save Discord settings
-  const handleSaveDiscord = async (updated: Partial<DiscordConfig>) => {
+  const handleSaveDiscord = async (updated: Partial<DiscordConfig>, newCampaignName?: string) => {
+    const effectiveCampaignName = newCampaignName !== undefined ? newCampaignName : updated.campaignName;
+    const body: Record<string, any> = { discord: updated };
+    if (effectiveCampaignName !== undefined) {
+      body.tiltify = { ...tiltifyConfig, campaignName: effectiveCampaignName };
+    }
     const res = await authFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ discord: updated }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -301,8 +307,14 @@ export default function App() {
     }
     const data = await res.json();
     setDiscordConfig(data.discord);
+    if (data.tiltify) setTiltifyConfig(data.tiltify);
     setStatus(data.status);
-    saveLocalConfigBackup(data.discord, tiltifyConfig);
+    saveLocalConfigBackup(data.discord, data.tiltify || tiltifyConfig);
+  };
+
+  const handleCampaignNameChange = (name: string) => {
+    setTiltifyConfig((prev) => ({ ...prev, campaignName: name }));
+    setDiscordConfig((prev) => ({ ...prev, campaignName: name }));
   };
 
   // Save Tiltify settings
@@ -318,13 +330,19 @@ export default function App() {
     }
     const data = await res.json();
     setTiltifyConfig(data.tiltify);
+    if (data.discord) setDiscordConfig(data.discord);
     setStatus(data.status);
-    saveLocalConfigBackup(discordConfig, data.tiltify);
+    saveLocalConfigBackup(data.discord || discordConfig, data.tiltify);
   };
 
   // Dispatch Discord Test
-  const handleTestDiscord = async (): Promise<{ success: boolean; error?: string }> => {
+  const handleTestDiscord = async (overrideCampaignName?: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      const activeName =
+        overrideCampaignName?.trim() ||
+        tiltifyConfig.campaignName?.trim() ||
+        discordConfig.campaignName?.trim() ||
+        (tiltifyConfig.campaignId ? `Campaign #${tiltifyConfig.campaignId}` : 'Charity Marathon');
       const res = await authFetch('/api/discord/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -333,7 +351,7 @@ export default function App() {
           amount: 25.0,
           currency: 'USD',
           comment: 'Testing Tiltify-to-Discord alert webhook integration! 🚀',
-          campaignName: tiltifyConfig.campaignId ? `Campaign #${tiltifyConfig.campaignId}` : 'Charity Marathon',
+          campaignName: activeName,
         }),
       });
       const data = await res.json();
@@ -529,6 +547,21 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('prizes')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+              activeTab === 'prizes'
+                ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
+            }`}
+          >
+            <Package className="w-4 h-4 text-amber-400" />
+            <span>Prize Shipping &amp; Fulfillment</span>
+            <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md text-[10px] font-mono">
+              Individual Prizes
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('feed')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
               activeTab === 'feed'
@@ -561,9 +594,10 @@ export default function App() {
           {activeTab === 'discord' && (
             <DiscordConfigCard
               config={discordConfig}
-              campaignName={tiltifyConfig.campaignName}
+              campaignName={tiltifyConfig.campaignName || discordConfig.campaignName}
               onSave={handleSaveDiscord}
               onTest={handleTestDiscord}
+              onCampaignNameChange={handleCampaignNameChange}
             />
           )}
 
@@ -574,6 +608,10 @@ export default function App() {
               onSave={handleSaveTiltify}
               onPollNow={handlePollNow}
             />
+          )}
+
+          {activeTab === 'prizes' && (
+            <PrizeShippingCenter onRefreshFeed={fetchDonations} />
           )}
 
           {activeTab === 'feed' && (

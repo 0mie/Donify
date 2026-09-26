@@ -20,6 +20,9 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  Calendar,
+  Filter,
+  Info,
 } from 'lucide-react';
 
 interface TiltifyConfigCardProps {
@@ -51,6 +54,15 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
     totalRaised?: number;
     targetGoal?: number;
     currency?: string;
+  } | null>(null);
+
+  // Auction House Historical Pull States
+  const [isPullingAuctions, setIsPullingAuctions] = useState(false);
+  const [isDispatchingPrizes, setIsDispatchingPrizes] = useState(false);
+  const [pullAuctionsSendToDiscord, setPullAuctionsSendToDiscord] = useState(true);
+  const [pullAuctionsResult, setPullAuctionsResult] = useState<{
+    type: 'success' | 'error';
+    text: string;
   } | null>(null);
 
   useEffect(() => {
@@ -216,6 +228,86 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
       });
     } finally {
       setIsFetchingCampaign(false);
+    }
+  };
+
+  const handlePullPreviousAuctions = async () => {
+    const cid = localConfig.campaignId?.trim();
+    if (!cid) {
+      setPullAuctionsResult({ type: 'error', text: 'Please enter a Tiltify Campaign ID, Slug, or URL first.' });
+      return;
+    }
+    setIsPullingAuctions(true);
+    setPullAuctionsResult(null);
+    try {
+      const token = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/tiltify/pull-auctions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          campaignId: cid,
+          startDate: localConfig.auctionDateRangeStart || undefined,
+          endDate: localConfig.auctionDateRangeEnd || undefined,
+          sendToDiscord: pullAuctionsSendToDiscord,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to pull auctions from Tiltify');
+      }
+      setPullAuctionsResult({
+        type: 'success',
+        text: data.message || `Pulled ${data.totalPulled} auctions successfully!`,
+      });
+      if (data.campaignSummary) {
+        setFetchedCampaignMeta({
+          name: data.campaignSummary.campaignName || data.campaignSummary.name,
+          totalRaised: data.campaignSummary.totalRaised,
+          targetGoal: data.campaignSummary.targetGoal,
+          currency: data.campaignSummary.currency,
+        });
+      }
+    } catch (err: any) {
+      setPullAuctionsResult({
+        type: 'error',
+        text: err.message || 'Error occurred while contacting Tiltify API for auctions.',
+      });
+    } finally {
+      setIsPullingAuctions(false);
+    }
+  };
+
+  const handleDispatchPrizes = async () => {
+    setIsDispatchingPrizes(true);
+    setPullAuctionsResult(null);
+    try {
+      const token = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/tiltify/dispatch-prizes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to dispatch prizes to Discord');
+      }
+      setPullAuctionsResult({
+        type: 'success',
+        text: data.message || `Dispatched prize shipping cards to Discord!`,
+      });
+    } catch (err: any) {
+      setPullAuctionsResult({
+        type: 'error',
+        text: err.message || 'Error dispatching prize alerts to Discord.',
+      });
+    } finally {
+      setIsDispatchingPrizes(false);
     }
   };
 
@@ -559,6 +651,175 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
                       </p>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Tiltify Auction House Historical Data & Previous Winners Backfill */}
+              <div className="pt-3 border-t border-neutral-850 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-200">
+                    <span className="text-amber-400">🔨</span>
+                    <span>Auction House Data &amp; Previous Winners Backfill</span>
+                  </div>
+                  <span className="text-[10px] text-amber-300 bg-amber-950/80 border border-amber-800/80 px-1.5 py-0.5 rounded">
+                    Historical Pull
+                  </span>
+                </div>
+
+                <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3 space-y-3 text-xs">
+                  {/* Toggle: Include Auction Totals in Overall Campaign Progress */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={localConfig.includeAuctionsInTotal !== false}
+                      onChange={(e) => handleInputChange('includeAuctionsInTotal', e.target.checked)}
+                      className="rounded bg-neutral-900 border-neutral-700 text-amber-500 focus:ring-amber-500 w-4 h-4 mt-0.5 shrink-0"
+                    />
+                    <div>
+                      <span className="font-semibold text-white">Add Auction House Totals to Campaign Progress</span>
+                      <p className="text-[11px] text-neutral-400 mt-0.5">
+                        Tiltify's public API <code className="text-neutral-300 font-mono">amount_raised</code> only tracks regular checkout donations. When enabled, the bot automatically combines your auction house winning bids into the campaign total so all your funds stay in one place.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Toggle: Auto-pull previous auction winners during background polling */}
+                  <label className="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-neutral-850">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(localConfig.autoPullPreviousAuctions)}
+                      onChange={(e) => handleInputChange('autoPullPreviousAuctions', e.target.checked)}
+                      className="rounded bg-neutral-900 border-neutral-700 text-indigo-500 focus:ring-indigo-500 w-4 h-4 mt-0.5 shrink-0"
+                    />
+                    <div>
+                      <span className="font-semibold text-white">Auto-Pull Previous Auction Winners in Polling</span>
+                      <p className="text-[11px] text-neutral-400 mt-0.5">
+                        Automatically queries and imports all historical auction house winners for your current campaign on every background poll cycle.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Date Range Selection */}
+                  <div className="pt-2 border-t border-neutral-850 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-teal-400" />
+                        <span>Historical Date Range (Optional Filter)</span>
+                      </label>
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const yearStart = `${new Date().getFullYear()}-01-01`;
+                            handleInputChange('auctionDateRangeStart', yearStart);
+                            handleInputChange('auctionDateRangeEnd', '');
+                          }}
+                          className="text-teal-400 hover:text-teal-300 underline"
+                        >
+                          Start of Year ({new Date().getFullYear()})
+                        </button>
+                        <span className="text-neutral-600">•</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleInputChange('auctionDateRangeStart', '');
+                            handleInputChange('auctionDateRangeEnd', '');
+                          }}
+                          className="text-neutral-400 hover:text-neutral-300"
+                        >
+                          All Time
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] text-neutral-400 block mb-0.5">From Date</span>
+                        <input
+                          type="date"
+                          value={localConfig.auctionDateRangeStart || ''}
+                          onChange={(e) => handleInputChange('auctionDateRangeStart', e.target.value)}
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-neutral-400 block mb-0.5">To Date</span>
+                        <input
+                          type="date"
+                          value={localConfig.auctionDateRangeEnd || ''}
+                          onChange={(e) => handleInputChange('auctionDateRangeEnd', e.target.value)}
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Dispatch to Discord Checkbox */}
+                    <div className="pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-[11px] text-neutral-300">
+                        <input
+                          type="checkbox"
+                          checked={pullAuctionsSendToDiscord}
+                          onChange={(e) => setPullAuctionsSendToDiscord(e.target.checked)}
+                          className="rounded bg-neutral-900 border-neutral-700 text-amber-500 focus:ring-amber-500 w-3.5 h-3.5"
+                        />
+                        <span>Dispatch individual Discord cards with winner shipping &amp; prize info (checked = sends each prize to Discord)</span>
+                      </label>
+                    </div>
+
+                    {/* Pull Action Buttons */}
+                    <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePullPreviousAuctions}
+                        disabled={isPullingAuctions || !localConfig.campaignId}
+                        className="flex-1 flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white px-3 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isPullingAuctions ? 'animate-spin' : ''}`} />
+                        <span>{isPullingAuctions ? 'Pulling Individual Prizes...' : 'Pull Each Prize Individually & Send Info'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDispatchPrizes}
+                        disabled={isDispatchingPrizes || !localConfig.campaignId}
+                        className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                        title="Send all prize fulfillment cards to Discord"
+                      >
+                        <Sparkles className={`w-3.5 h-3.5 ${isDispatchingPrizes ? 'animate-spin' : ''}`} />
+                        <span>{isDispatchingPrizes ? 'Dispatching...' : 'Dispatch All Prizes to Discord'}</span>
+                      </button>
+                    </div>
+
+                    {pullAuctionsResult && (
+                      <div
+                        className={`p-2.5 rounded-lg text-xs mt-2 flex items-center gap-2 ${
+                          pullAuctionsResult.type === 'success'
+                            ? 'bg-emerald-950/40 border border-emerald-800/60 text-emerald-300'
+                            : 'bg-rose-950/40 border border-rose-800/60 text-rose-300'
+                        }`}
+                      >
+                        {pullAuctionsResult.type === 'success' ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        )}
+                        <span className="flex-1">{pullAuctionsResult.text}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Auto-Increase Goal & Dynamic Stretch Goal Explainer Callout */}
+              <div className="pt-2">
+                <div className="p-3 bg-indigo-950/20 border border-indigo-800/40 rounded-xl text-xs text-indigo-200/90 space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold text-indigo-300">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span>Tiltify Auto-Increase Goal &amp; Dynamic Stretch Goals</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-300">
+                    <strong>Will the bot auto-update to your new goal?</strong> <strong>Yes!</strong> When Tiltify reaches a milestone threshold with auto-increase enabled, Tiltify automatically increments the campaign's <code className="text-indigo-300 bg-neutral-900 px-1 py-0.5 rounded font-mono">goal.value</code> in their v5 API. The bot checks Tiltify live on every poll and webhook, dynamically resizing your Discord progress bars and stretch goals automatically.
+                  </p>
                 </div>
               </div>
 

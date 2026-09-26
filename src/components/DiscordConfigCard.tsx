@@ -28,8 +28,9 @@ import {
 interface DiscordConfigCardProps {
   config: DiscordConfig;
   campaignName?: string;
-  onSave: (updated: Partial<DiscordConfig>) => Promise<void>;
-  onTest: () => Promise<{ success: boolean; error?: string }>;
+  onSave: (updated: Partial<DiscordConfig>, newCampaignName?: string) => Promise<void>;
+  onTest: (overrideCampaignName?: string) => Promise<{ success: boolean; error?: string }>;
+  onCampaignNameChange?: (name: string) => void;
 }
 
 const COLOR_PRESETS = [
@@ -127,8 +128,12 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   campaignName,
   onSave,
   onTest,
+  onCampaignNameChange,
 }) => {
   const [localConfig, setLocalConfig] = useState<DiscordConfig>(config);
+  const [localCampaignName, setLocalCampaignName] = useState<string>(
+    campaignName || config.campaignName || ''
+  );
   const [showSecrets, setShowSecrets] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -168,6 +173,19 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
       setLocalConfig(config);
     }
   }, [config, isDirty]);
+
+  useEffect(() => {
+    if (campaignName !== undefined) {
+      setLocalCampaignName(campaignName);
+    }
+  }, [campaignName]);
+
+  const handleCampaignNameChange = (val: string) => {
+    setLocalCampaignName(val);
+    setIsDirty(true);
+    handleInputChange('campaignName', val);
+    onCampaignNameChange?.(val);
+  };
 
   const handleInputChange = (field: keyof DiscordConfig, value: any) => {
     setIsDirty(true);
@@ -555,9 +573,9 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
     setIsSaving(true);
     setStatusMessage(null);
     try {
-      await onSave(localConfig);
+      await onSave({ ...localConfig, campaignName: localCampaignName }, localCampaignName);
       setIsDirty(false);
-      setStatusMessage({ type: 'success', text: 'Discord settings saved successfully!' });
+      setStatusMessage({ type: 'success', text: 'Discord settings and campaign title saved successfully!' });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Failed to save Discord settings.' });
     } finally {
@@ -570,8 +588,8 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
     setStatusMessage(null);
     try {
       // First ensure current values are saved
-      await onSave(localConfig);
-      const res = await onTest();
+      await onSave({ ...localConfig, campaignName: localCampaignName }, localCampaignName);
+      const res = await onTest(localCampaignName);
       if (res.success) {
         setStatusMessage({ type: 'success', text: 'Success! Test notification delivered to your Discord server.' });
       } else {
@@ -853,7 +871,43 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                   </div>
                 </div>
 
-                {/* 4. Custom Templates: Title & Description */}
+                {/* 4. Campaign Display Name (Direct Live Override) */}
+                <div className="pt-2 border-t border-neutral-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Campaign Display Name (Discord Title)</span>
+                    </label>
+                    <span className="text-[10px] text-teal-300 bg-teal-950/80 border border-teal-800/80 px-1.5 py-0.5 rounded font-medium">
+                      Updates Live in Preview
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={localCampaignName}
+                      onChange={(e) => handleCampaignNameChange(e.target.value)}
+                      placeholder="e.g. Charity Gaming Marathon 2026"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-0.5">
+                    <span>
+                      Directly sets the campaign name shown in embeds &amp; the <code className="text-amber-300 font-mono">{"{campaign}"}</code> variable.
+                    </span>
+                    {localCampaignName && (
+                      <button
+                        type="button"
+                        onClick={() => handleCampaignNameChange('')}
+                        className="text-neutral-500 hover:text-neutral-300 transition-colors shrink-0"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 5. Custom Templates: Title & Description */}
                 <div className="pt-2 border-t border-neutral-800/80 space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -1979,7 +2033,7 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                 amount: 50.0,
                 currency: "USD",
                 comment: "Keep up the amazing stream for this cause! Proud of this community! 🎉",
-                campaignName: campaignName?.trim() || "Charity Gaming Marathon 2026",
+                campaignName: localCampaignName?.trim() || campaignName?.trim() || "Charity Gaming Marathon 2026",
                 reward: {
                   name: "Champion Signed Poster & T-Shirt",
                   description: "Limited edition charity t-shirt with official stream signature.",

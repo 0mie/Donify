@@ -19,6 +19,9 @@ export interface ClaimedReward {
   donorEmail?: string;
   shippingAddress?: RewardDeliveryAddress;
   customOptions?: Record<string, string> | string;
+  shippingStatus?: 'pending' | 'shipped' | 'delivered';
+  trackingNumber?: string;
+  fulfillmentNotes?: string;
 }
 
 export interface AuctionWinnerInfo {
@@ -33,6 +36,9 @@ export interface AuctionWinnerInfo {
   shippingAddress?: RewardDeliveryAddress;
   specialInstructions?: string;
   endedAt?: string;
+  shippingStatus?: 'pending' | 'shipped' | 'delivered';
+  trackingNumber?: string;
+  fulfillmentNotes?: string;
 }
 
 export type EmbedLayoutMode = 'modern' | 'compact' | 'minimal';
@@ -75,6 +81,7 @@ export interface DiscordConfig {
   showEmbedTimestamp?: boolean;
   progressBarCharStyle?: ProgressBarCharStyle;
   auctionTitleTemplate?: string;
+  campaignName?: string;
 }
 
 export interface TiltifyConfig {
@@ -87,6 +94,11 @@ export interface TiltifyConfig {
   pollIntervalSeconds: number;
   pollingEnabled: boolean;
   webhookSecret: string;
+  includeAuctionsInTotal?: boolean;
+  autoPullPreviousAuctions?: boolean;
+  auctionDateRangeStart?: string;
+  auctionDateRangeEnd?: string;
+  auctionHouseIdOrSlug?: string;
 }
 
 export interface DonationRecord {
