@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 
+// Works in both ESM and Render CommonJS build
 const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 
 const app = express();
@@ -15,7 +16,7 @@ interface BotConfig {
   botUsername: string;
   botAvatarUrl: string;
   embedColor: string;
-  mentionRole: string;
+  mentionRole: string; // e.g., '', '@here', '<@&ROLE_ID>'
   includeEmailInDiscord: boolean;
   notifyOnAuctionWins: boolean;
   notifyOnBids: boolean;
@@ -27,9 +28,9 @@ let botConfig: BotConfig = {
   discordWebhookUrl: '',
   botUsername: 'Tiltify Alerts',
   botAvatarUrl: 'https://assets.tiltify.com/assets/favicon/apple-touch-icon.png',
-  embedColor: '#05c3de',
+  embedColor: '#05c3de', // Tiltify teal
   mentionRole: '',
-  includeEmailInDiscord: false,
+  includeEmailInDiscord: false, // Default to false for Discord privacy, visible in dashboard
   notifyOnAuctionWins: true,
   notifyOnBids: true,
   notifyOnDonations: true,
@@ -39,13 +40,13 @@ let botConfig: BotConfig = {
 export interface AuctionWinEvent {
   id: string;
   auctionId: string;
-  auctionName: string;
+  auctionName: string; // The real auction/item title!
   winningBid: number;
   currency: string;
   winnerName: string;
-  winnerEmail: string | null;
+  winnerEmail: string | null; // Real email or null if masked by Tiltify public scope
   isEmailPrivate: boolean;
-  donorComment: string | null;
+  donorComment: string | null; // Real comment left by donor, or null (NO random instructions!)
   shippingAddress?: string | null;
   status: 'won' | 'paid' | 'fulfilled' | 'pending';
   timestamp: string;
@@ -65,6 +66,7 @@ export interface ActivityLog {
 let auctionWins: AuctionWinEvent[] = [];
 let activityLogs: ActivityLog[] = [];
 
+// Helper to extract the actual auction name from various Tiltify payload formats
 function extractAuctionName(data: any): string {
   if (data?.item_name && typeof data.item_name === 'string' && data.item_name.trim()) {
     return data.item_name.trim();
@@ -107,6 +109,7 @@ function extractAuctionName(data: any): string {
   return 'Charity Auction Lot';
 }
 
+// Helper to extract actual winner email without fabricating fake @example.com
 function extractWinnerEmail(data: any): { email: string | null; isPrivate: boolean } {
   const possibleEmail = 
     data?.donor_email || 
@@ -129,6 +132,7 @@ function extractWinnerEmail(data: any): { email: string | null; isPrivate: boole
   return { email: null, isPrivate: true };
 }
 
+// Helper to extract authentic donor comment (NO random or hallucinated instructions!)
 function extractDonorComment(data: any): string | null {
   const comment = 
     data?.comment || 
@@ -143,6 +147,7 @@ function extractDonorComment(data: any): string | null {
   return null;
 }
 
+// Format Discord embed message for an auction win
 function buildAuctionDiscordEmbed(auction: AuctionWinEvent) {
   const fields = [
     {
@@ -200,6 +205,7 @@ function buildAuctionDiscordEmbed(auction: AuctionWinEvent) {
   };
 }
 
+// Function to send payload to Discord Webhook
 async function sendToDiscord(payload: any): Promise<{ success: boolean; error?: string }> {
   if (!botConfig.discordWebhookUrl) {
     return { success: false, error: 'Discord Webhook URL is not configured' };
@@ -224,19 +230,24 @@ async function sendToDiscord(payload: any): Promise<{ success: boolean; error?: 
 }
 
 // API Routes
+
+// Get Configuration
 app.get('/api/config', (_req, res) => {
   res.json(botConfig);
 });
 
+// Update Configuration
 app.post('/api/config', (req, res) => {
   botConfig = { ...botConfig, ...req.body };
   res.json({ success: true, config: botConfig });
 });
 
+// Get Auction Wins
 app.get('/api/auctions', (_req, res) => {
   res.json(auctionWins);
 });
 
+// Update an auction item title manually if needed
 app.patch('/api/auctions/:id', (req, res) => {
   const { id } = req.params;
   const { auctionName, status } = req.body;
@@ -249,15 +260,18 @@ app.patch('/api/auctions/:id', (req, res) => {
   res.json({ success: true, item });
 });
 
+// Get Activity Logs
 app.get('/api/logs', (_req, res) => {
   res.json(activityLogs);
 });
 
+// Clear Activity Logs
 app.delete('/api/logs', (_req, res) => {
   activityLogs = [];
   res.json({ success: true });
 });
 
+// Test Discord Webhook with sample embed
 app.post('/api/discord/test', async (req, res) => {
   const sampleAuction: AuctionWinEvent = {
     id: `test-${Date.now()}`,
@@ -289,6 +303,7 @@ app.post('/api/discord/test', async (req, res) => {
   res.json(result);
 });
 
+// Tiltify Webhook Receiver
 app.post('/api/tiltify/webhook', async (req, res) => {
   try {
     const payload = req.body;
@@ -346,6 +361,7 @@ app.post('/api/tiltify/webhook', async (req, res) => {
   }
 });
 
+// Setup Vite or static serving
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -370,9 +386,9 @@ async function startServer() {
       }
     });
   } else {
-    app.use(express.static(path.join(currentDir, 'dist')));
+    app.use(express.static(path.join(__dirname, 'dist')));
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(currentDir, 'dist', 'index.html'));
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }
 
