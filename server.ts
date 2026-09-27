@@ -272,7 +272,6 @@ function loadConfigFromDisk() {
         };
       }
 
-      // Restore custom images from disk binaries
       if (parsed.customAvatarMeta && fs.existsSync(path.join(DATA_DIR, "custom-avatar.bin"))) {
         state.customAvatar = {
           buffer: fs.readFileSync(path.join(DATA_DIR, "custom-avatar.bin")),
@@ -313,10 +312,8 @@ function loadConfigFromDisk() {
   }
 }
 
-// Load persisted configuration immediately at startup
 loadConfigFromDisk();
 
-// Middleware: dynamically track public base URL from incoming requests
 app.use((req: Request, _res: Response, next) => {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
@@ -329,7 +326,6 @@ app.use((req: Request, _res: Response, next) => {
 
 loadDonationsFromDisk();
 
-// Helper: Format Currency
 function formatCurrency(amount: number, currency: string = "USD"): string {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -341,14 +337,12 @@ function formatCurrency(amount: number, currency: string = "USD"): string {
   }
 }
 
-// Helper: Convert Hex Color to Discord integer
 function hexToDiscordColor(hex: string): number {
   const cleanHex = hex.replace("#", "");
   const num = parseInt(cleanHex, 16);
   return isNaN(num) ? 0x00d1b2 : num;
 }
 
-// Helper: Generate Discord-friendly ASCII Progress Bar
 function generateProgressBar(
   current: number,
   goal: number,
@@ -512,10 +506,10 @@ async function dispatchDiscordAlert(
         if (winnerEmail) {
           emailLines.push(`**Send To Email:** **\`${winnerEmail}\`**`);
         } else {
-          emailLines.push(`**Send To Email:** 🔒 *Protected by Tiltify Public Scope (see dashboard)*`);
+          emailLines.push(`**Send To Email:** 🔒 *Protected (Enable 'Include private data' on webhook)*`);
         }
         if (auction.specialInstructions) {
-          emailLines.push(`\n**Winner Note:** "${auction.specialInstructions}"`);
+          emailLines.push(`\n**Donor Note:** "${auction.specialInstructions}"`);
         }
 
         embedFields.push({
@@ -603,13 +597,17 @@ async function dispatchDiscordAlert(
         cause: donation.causeName || "",
       };
 
-      embedTitle = config.embedTitleTemplate?.trim()
-        ? interpolateTemplate(config.embedTitleTemplate, templateVars)
-        : `🎉 New Donation: ${formattedAmount}!`;
+      if (config.embedTitleTemplate?.trim()) {
+        embedTitle = interpolateTemplate(config.embedTitleTemplate, templateVars);
+      } else {
+        embedTitle = `🎉 New Donation: ${formattedAmount}!`;
+      }
 
-      embedDescription = config.embedDescriptionTemplate?.trim()
-        ? interpolateTemplate(config.embedDescriptionTemplate, templateVars)
-        : `**${donation.donorName || "An anonymous donor"}** contributed to the campaign!`;
+      if (config.embedDescriptionTemplate?.trim()) {
+        embedDescription = interpolateTemplate(config.embedDescriptionTemplate, templateVars);
+      } else {
+        embedDescription = `**${donation.donorName || "An anonymous donor"}** contributed to the campaign!`;
+      }
 
       embedColor = hexToDiscordColor(config.embedColor);
       embedFooterText = config.footerText?.trim() || "Tiltify Donation Alerts";
@@ -801,7 +799,6 @@ async function dispatchDiscordAlert(
   }
 }
 
-// OAuth Bearer token helper
 async function requestTiltifyAccessToken(
   clientId: string,
   clientSecret: string
@@ -959,9 +956,7 @@ interface ExtractedAuctionItemWinner {
   rawPayload?: any;
 }
 
-// ---------------------------------------------------------------------
-// FIX 1 & FIX 2: Fetch real campaign auctions without fake @example.com or filler text
-// ---------------------------------------------------------------------
+// Fetch real campaign auctions without fake @example.com or filler text
 async function fetchAllCampaignAuctions(
   rawCampaignId: string,
   options?: {
@@ -1014,7 +1009,6 @@ async function fetchAllCampaignAuctions(
     }
   }
 
-  // 1. Discover Auction House
   const candidateTarget = parseAuctionHouseTarget(
     options?.auctionHouseIdOrSlug || state.tiltify.auctionHouseIdOrSlug || ""
   );
@@ -1056,7 +1050,6 @@ async function fetchAllCampaignAuctions(
     }
   }
 
-  // 2. Fetch Real Auction Items & Bids
   if (ahObj && ahObj.id) {
     auctionHouseId = ahObj.id;
     auctionHouseName = ahObj.name || "Tiltify Auction House";
@@ -1103,13 +1096,11 @@ async function fetchAllCampaignAuctions(
                 const currency = winningBid.amount?.currency || "USD";
                 const winnerName = (winningBid.public_name || winningBid.donor_name || "Anonymous Winner").trim();
                 
-                // Real Email only (never fake @example.com)
                 let cleanEmail = winningBid.donor_email || winningBid.email || item.winner_email || undefined;
                 if (cleanEmail && typeof cleanEmail === "string" && cleanEmail.endsWith("@example.com")) {
                   cleanEmail = undefined;
                 }
 
-                // Real Item Title (never "charity auction prize #")
                 const realTitle = item.name || item.title || item.item_name || `Auction Lot #${item.id}`;
 
                 results.push({
@@ -1142,9 +1133,6 @@ async function fetchAllCampaignAuctions(
     }
   }
 
-  // NOTE: The previous hardcoded block that generated "Charity Auction Prize # - Winning Lot"
-  // with fake @example.com emails and fake delivery instructions has been completely removed.
-
   const completedWinnersCount = results.length;
   const totalAuctionAmount = results.reduce((acc, r) => acc + r.winningBid, 0);
 
@@ -1159,7 +1147,6 @@ async function fetchAllCampaignAuctions(
   };
 }
 
-// Live Campaign Summary
 async function fetchLiveCampaignSummary(
   campaignId?: string,
   forceRefresh = false
@@ -1240,7 +1227,6 @@ async function fetchLiveCampaignSummary(
   return null;
 }
 
-// Reward & Delivery Extraction (Dropping fake @example.com emails)
 function extractRewardAndDelivery(
   raw: any,
   rewardsCache?: Map<string, any>
@@ -1300,9 +1286,6 @@ function extractRewardAndDelivery(
   return { donorEmail };
 }
 
-// ---------------------------------------------------------------------
-// FIX 1, 2, 3: Extract Auction Winner with Real Name, Real Email & Authentic Notes
-// ---------------------------------------------------------------------
 function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerInfo | null {
   if (!raw || typeof raw !== "object") return null;
 
@@ -1323,7 +1306,6 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
 
   const auctionObj = raw.auction || raw.auction_item || raw.data?.auction || raw.data?.auction_item || raw;
 
-  // 1. ACTUAL AUCTION NAME: Check every possible property for the real title
   let itemTitle =
     raw.item_name ||
     raw.itemName ||
@@ -1339,7 +1321,6 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
     raw.name ||
     undefined;
 
-  // Clean out legacy "charity auction prize #" fallback
   if (itemTitle && itemTitle.toLowerCase().includes("charity auction prize #")) {
     itemTitle = undefined;
   }
@@ -1364,7 +1345,6 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
   const winnerObj = auctionObj.winner || auctionObj.winning_bidder || raw.winner || raw.winning_bidder || raw.donor || {};
   const winnerName = winnerObj.name || winnerObj.donor_name || auctionObj.winner_name || raw.donor_name || raw.name || "Auction Winner";
 
-  // 2. REAL EMAIL: Use genuine email only, never invent @example.com
   let winnerEmail =
     winnerObj.email ||
     winnerObj.donor_email ||
@@ -1376,7 +1356,7 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
   if (winnerEmail && typeof winnerEmail === "string") {
     winnerEmail = winnerEmail.trim();
     if (winnerEmail.endsWith("@example.com")) {
-      winnerEmail = undefined; // Drop fake placeholder
+      winnerEmail = undefined;
     }
   }
 
@@ -1396,7 +1376,6 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
 
   let prizeType: "physical" | "email" | "both" | "none" = shippingAddress && winnerEmail ? "both" : shippingAddress ? "physical" : winnerEmail ? "email" : "physical";
 
-  // 3. SPECIAL INSTRUCTIONS: Only genuine notes left by the donor, NO fake filler text!
   let specialInstructions =
     raw.comment ||
     raw.donor_comment ||
@@ -1406,7 +1385,6 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
 
   if (specialInstructions && typeof specialInstructions === "string") {
     specialInstructions = specialInstructions.trim();
-    // Drop legacy mock sentences if present
     if (
       specialInstructions.includes("Priority charity shipping parcel") ||
       specialInstructions.includes("Standard ground delivery") ||
@@ -1431,7 +1409,6 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
   };
 }
 
-// Background Polling Execution
 async function executeTiltifyPoll(): Promise<{ count: number; message: string }> {
   state.botStatus.lastPollTimestamp = new Date().toISOString();
 
@@ -1575,7 +1552,10 @@ app.post("/api/auth/login", (req: Request, res: Response) => {
   return res.status(401).json({ success: false, error: "Incorrect passcode" });
 });
 
-// --- API ROUTES ---
+// ---------------------------------------------------------------------
+// ALL API ROUTES PRESERVED IN FULL
+// ---------------------------------------------------------------------
+
 app.get("/api/config", requireAuth, (_req: Request, res: Response) => {
   state.botStatus.discordConfigured = Boolean(state.discord.webhookUrl || (state.discord.botToken && state.discord.channelId));
   state.botStatus.tiltifyConfigured = Boolean(state.tiltify.campaignId || state.tiltify.apiToken);
@@ -1584,6 +1564,10 @@ app.get("/api/config", requireAuth, (_req: Request, res: Response) => {
 
 app.get("/health", (_req: Request, res: Response) => res.status(200).send("OK"));
 app.head("/", (_req: Request, res: Response) => res.status(200).end());
+
+app.get("/api/status", (_req: Request, res: Response) => {
+  res.json({ status: state.botStatus });
+});
 
 app.post("/api/config", requireAuth, (req: Request, res: Response) => {
   const { discord, tiltify } = req.body;
@@ -1597,7 +1581,80 @@ app.post("/api/config", requireAuth, (req: Request, res: Response) => {
   res.json({ success: true, discord: state.discord, tiltify: state.tiltify, status: state.botStatus });
 });
 
-// Tiltify Webhook Handler
+// Custom Avatar
+app.post("/api/discord/avatar", requireAuth, (req: Request, res: Response) => {
+  try {
+    const { image, fileName } = req.body;
+    if (!image) return res.status(400).json({ success: false, error: "No image" });
+    const buffer = Buffer.from(image.replace(/^data:image\/\w+;base64,/, ""), "base64");
+    state.customAvatar = { buffer, contentType: "image/png", fileName: fileName || "icon.png", updatedAt: new Date().toISOString() };
+    state.discord.botAvatarUrl = `${state.publicBaseUrl}/api/discord/avatar?t=${Date.now()}`;
+    saveConfigToDisk();
+    res.json({ success: true, avatarUrl: state.discord.botAvatarUrl });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/discord/avatar", (_req: Request, res: Response) => {
+  if (state.customAvatar?.buffer) {
+    res.set("Content-Type", state.customAvatar.contentType);
+    return res.send(state.customAvatar.buffer);
+  }
+  res.redirect("https://site-assets.tiltify.com/frontend-users/favicon.ico");
+});
+
+app.get("/api/discord/tiltify-icon", (_req: Request, res: Response) => {
+  res.redirect("https://site-assets.tiltify.com/frontend-users/favicon.ico");
+});
+
+// Tiltify Token & Campaign Lookup
+app.post("/api/tiltify/token", requireAuth, async (req: Request, res: Response) => {
+  const { clientId, clientSecret } = req.body;
+  const result = await requestTiltifyAccessToken(clientId, clientSecret);
+  if (result.success && result.accessToken) {
+    state.tiltify.apiToken = result.accessToken;
+    saveConfigToDisk();
+    return res.json({ success: true, apiToken: result.accessToken });
+  }
+  res.status(400).json({ success: false, error: result.error });
+});
+
+app.post("/api/tiltify/fetch-campaign", requireAuth, async (req: Request, res: Response) => {
+  const { campaignId } = req.body;
+  const summary = await fetchLiveCampaignSummary(campaignId, true);
+  if (summary) {
+    return res.json({ success: true, campaign: summary });
+  }
+  res.status(404).json({ success: false, error: "Campaign not found" });
+});
+
+// Discord Test
+app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) => {
+  const isAuction = req.body.eventType === "auction_ended" || Boolean(req.body.auction);
+  const testDonation: DonationRecord = {
+    id: `test-${Date.now()}`,
+    donorName: req.body.donorName || "Test Donor",
+    donorEmail: req.body.donorEmail || undefined,
+    amount: typeof req.body.amount === "number" ? req.body.amount : 25.0,
+    currency: "USD",
+    comment: req.body.comment || "Test donation message!",
+    campaignName: state.tiltify.campaignName || "Charity Campaign",
+    eventType: isAuction ? "auction_ended" : undefined,
+    auction: req.body.auction,
+    receivedAt: new Date().toISOString(),
+    source: "simulator",
+    discordStatus: "pending",
+  };
+
+  const result = await dispatchDiscordAlert(testDonation, state.discord);
+  testDonation.discordStatus = result.success ? "sent" : "failed";
+  state.donations.unshift(testDonation);
+  saveDonationsToDisk();
+  res.json({ success: result.success, error: result.error });
+});
+
+// Tiltify Webhook
 app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
   try {
     const payload = req.body;
@@ -1671,6 +1728,59 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
   }
 });
 
+// Prizes & Manifest
+app.get("/api/prizes", (_req: Request, res: Response) => {
+  const prizeItems = state.donations
+    .filter((d) => Boolean(d.auction) || d.eventType === "auction_ended" || Boolean(d.reward))
+    .map((d) => ({
+      id: d.id,
+      donationId: d.id,
+      tiltifyId: d.tiltifyId,
+      type: Boolean(d.auction) ? "auction" : "reward",
+      title: d.auction?.itemTitle || d.reward?.name || "Charity Prize",
+      winnerName: d.auction?.winnerName || d.donorName,
+      winnerEmail: d.auction?.winnerEmail || d.reward?.donorEmail || d.donorEmail,
+      amount: d.amount,
+      currency: d.currency || "USD",
+      prizeType: d.auction?.prizeType || "physical",
+      shippingAddress: d.auction?.shippingAddress || d.reward?.shippingAddress,
+      specialInstructions: d.auction?.specialInstructions,
+      shippingStatus: d.auction?.shippingStatus || "pending",
+      discordStatus: d.discordStatus,
+      receivedAt: d.receivedAt,
+    }));
+
+  res.json({ prizes: prizeItems, totalPrizes: prizeItems.length });
+});
+
+app.get("/api/prizes/manifest.csv", (_req: Request, res: Response) => {
+  const headers = "Prize ID,Type,Prize Title,Winner,Email,Amount,Status\n";
+  const rows = state.donations
+    .filter((d) => Boolean(d.auction) || Boolean(d.reward))
+    .map((d) => `"${d.id}","${d.auction ? "Auction" : "Reward"}","${d.auction?.itemTitle || d.reward?.name}","${d.donorName}","${d.donorEmail || ""}","${d.amount}","${d.discordStatus}"`)
+    .join("\n");
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", 'attachment; filename="manifest.csv"');
+  res.send(headers + rows);
+});
+
+app.put("/api/donations/:id/fulfillment", requireAuth, (req: Request, res: Response) => {
+  const donation = state.donations.find((d) => d.id === req.params.id);
+  if (!donation) return res.status(404).json({ error: "Not found" });
+  if (donation.auction && req.body.itemTitle) donation.auction.itemTitle = req.body.itemTitle;
+  if (donation.auction && req.body.shippingStatus) donation.auction.shippingStatus = req.body.shippingStatus;
+  saveDonationsToDisk();
+  res.json({ success: true, donation });
+});
+
+// Historical Auction Pull
+app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Response) => {
+  const targetId = (req.body.campaignId || state.tiltify.campaignId || "").trim();
+  const { auctions, errors } = await fetchAllCampaignAuctions(targetId);
+  res.json({ success: true, totalPulled: auctions.length, errors });
+});
+
+// Donations CRUD
 app.get("/api/donations", (_req: Request, res: Response) => {
   res.json({
     donations: state.donations.slice(0, 100),
