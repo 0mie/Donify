@@ -39,6 +39,8 @@ export interface AuctionWinnerInfo {
   shippingStatus?: 'pending' | 'shipped' | 'delivered';
   trackingNumber?: string;
   fulfillmentNotes?: string;
+  prizeDetails?: string;
+  rawItem?: any;
 }
 
 export type EmbedLayoutMode = 'modern' | 'compact' | 'minimal';

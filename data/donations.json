@@ -5,20 +5,18 @@
       "tiltifyId": "lot-4-9e9a27c5-06a9-4961-bb76-e15e36cac230",
       "eventType": "auction_ended",
       "donorName": "Charity Supporter #4",
-      "donorEmail": "supporter4@example.com",
       "amount": 30,
       "currency": "USD",
       "auction": {
         "auctionId": "lot-4-9e9a27c5-06a9-4961-bb76-e15e36cac230",
-        "itemTitle": "Charity Auction Prize #4 - Winning Lot",
-        "itemDescription": "Charity Auction Lot #4 winning bid ($30.00). Physical prize parcel requiring fulfillment & shipping.",
+        "itemTitle": "Mega Dragalge EX 118/086",
+        "itemDescription": "Mega Dragalge EX 118/086 winning bid ($30.00). Physical prize parcel requiring fulfillment & shipping.",
         "winningBid": 30,
         "currency": "USD",
         "winnerName": "Charity Supporter #4",
-        "winnerEmail": "supporter4@example.com",
         "endedAt": "2026-09-17T06:50:08.041748Z",
         "prizeType": "physical",
-        "prizeDetails": "Charity Auction Prize #4 - Winning Lot",
+        "prizeDetails": "Mega Dragalge EX 118/086",
         "shippingAddress": {
           "recipientName": "Charity Supporter #4",
           "addressLine1": "321 Beacon St",
@@ -27,7 +25,6 @@
           "postalCode": "78701",
           "country": "United States"
         },
-        "specialInstructions": "Include thank-you stream card.",
         "shippingStatus": "pending",
         "rawItem": {
           "campaignId": "9e9a27c5-06a9-4961-bb76-e15e36cac230",
@@ -37,7 +34,6 @@
           "completedAuctions": 4,
           "listedAuctions": 7,
           "winnerName": "Charity Supporter #4",
-          "winnerEmail": "supporter4@example.com",
           "shippingAddress": {
             "recipientName": "Charity Supporter #4",
             "addressLine1": "321 Beacon St",
@@ -45,8 +41,7 @@
             "region": "TX",
             "postalCode": "78701",
             "country": "United States"
-          },
-          "specialInstructions": "Include thank-you stream card."
+          }
         }
       },
       "campaignName": "gamingforher",
@@ -64,7 +59,6 @@
         "completedAuctions": 4,
         "listedAuctions": 7,
         "winnerName": "Charity Supporter #4",
-        "winnerEmail": "supporter4@example.com",
         "shippingAddress": {
           "recipientName": "Charity Supporter #4",
           "addressLine1": "321 Beacon St",
@@ -72,8 +66,7 @@
           "region": "TX",
           "postalCode": "78701",
           "country": "United States"
-        },
-        "specialInstructions": "Include thank-you stream card."
+        }
       }
     },
     {
@@ -81,20 +74,18 @@
       "tiltifyId": "lot-3-9e9a27c5-06a9-4961-bb76-e15e36cac230",
       "eventType": "auction_ended",
       "donorName": "Cristian Hernandez",
-      "donorEmail": "c.hernandez@example.com",
       "amount": 45.69,
       "currency": "USD",
       "auction": {
         "auctionId": "lot-3-9e9a27c5-06a9-4961-bb76-e15e36cac230",
-        "itemTitle": "Charity Auction Prize #3 - Winning Lot",
-        "itemDescription": "Charity Auction Lot #3 winning bid ($45.69). Physical prize parcel requiring fulfillment & shipping.",
+        "itemTitle": "Franky x Round1 Promo Card",
+        "itemDescription": "Franky x Round1 Promo Card winning bid ($45.69). Physical prize parcel requiring fulfillment & shipping.",
         "winningBid": 45.69,
         "currency": "USD",
         "winnerName": "Cristian Hernandez",
-        "winnerEmail": "c.hernandez@example.com",
         "endedAt": "2026-09-17T06:50:08.041748Z",
         "prizeType": "physical",
-        "prizeDetails": "Charity Auction Prize #3 - Winning Lot",
+        "prizeDetails": "Franky x Round1 Promo Card",
         "shippingAddress": {
           "recipientName": "Cristian Hernandez",
           "addressLine1": "789 Hope Way",
@@ -103,7 +94,6 @@
           "postalCode": "90001",
           "country": "United States"
         },
-        "specialInstructions": "Signature upon delivery requested.",
         "shippingStatus": "pending",
         "rawItem": {
           "campaignId": "9e9a27c5-06a9-4961-bb76-e15e36cac230",
@@ -113,7 +103,6 @@
           "completedAuctions": 4,
           "listedAuctions": 7,
           "winnerName": "Cristian Hernandez",
-          "winnerEmail": "c.hernandez@example.com",
           "shippingAddress": {
             "recipientName": "Cristian Hernandez",
             "addressLine1": "789 Hope Way",
@@ -121,8 +110,7 @@
             "region": "CA",
             "postalCode": "90001",
             "country": "United States"
-          },
-          "specialInstructions": "Signature upon delivery requested."
+          }
         }
       },
       "campaignName": "gamingforher",
@@ -140,7 +128,6 @@
         "completedAuctions": 4,
         "listedAuctions": 7,
         "winnerName": "Cristian Hernandez",
-        "winnerEmail": "c.hernandez@example.com",
         "shippingAddress": {
           "recipientName": "Cristian Hernandez",
           "addressLine1": "789 Hope Way",
@@ -148,8 +135,7 @@
           "region": "CA",
           "postalCode": "90001",
           "country": "United States"
-        },
-        "specialInstructions": "Signature upon delivery requested."
+        }
       }
     },
     {
@@ -157,20 +143,18 @@
       "tiltifyId": "lot-2-9e9a27c5-06a9-4961-bb76-e15e36cac230",
       "eventType": "auction_ended",
       "donorName": "Charity Supporter #2",
-      "donorEmail": "supporter2@example.com",
       "amount": 55,
       "currency": "USD",
       "auction": {
         "auctionId": "lot-2-9e9a27c5-06a9-4961-bb76-e15e36cac230",
-        "itemTitle": "Charity Auction Prize #2 - Winning Lot",
-        "itemDescription": "Charity Auction Lot #2 winning bid ($55.00). Physical prize parcel requiring fulfillment & shipping.",
+        "itemTitle": "Nami x Round1 Promo Card",
+        "itemDescription": "Nami x Round1 Promo Card winning bid ($55.00). Physical prize parcel requiring fulfillment & shipping.",
         "winningBid": 55,
         "currency": "USD",
         "winnerName": "Charity Supporter #2",
-        "winnerEmail": "supporter2@example.com",
         "endedAt": "2026-09-17T06:50:08.041748Z",
         "prizeType": "physical",
-        "prizeDetails": "Charity Auction Prize #2 - Winning Lot",
+        "prizeDetails": "Nami x Round1 Promo Card",
         "shippingAddress": {
           "recipientName": "Charity Supporter #2",
           "addressLine1": "250 Champion Ave",
@@ -179,7 +163,6 @@
           "postalCode": "98101",
           "country": "United States"
         },
-        "specialInstructions": "Standard ground delivery.",
         "shippingStatus": "pending",
         "rawItem": {
           "campaignId": "9e9a27c5-06a9-4961-bb76-e15e36cac230",
@@ -189,7 +172,6 @@
           "completedAuctions": 4,
           "listedAuctions": 7,
           "winnerName": "Charity Supporter #2",
-          "winnerEmail": "supporter2@example.com",
           "shippingAddress": {
             "recipientName": "Charity Supporter #2",
             "addressLine1": "250 Champion Ave",
@@ -197,8 +179,7 @@
             "region": "WA",
             "postalCode": "98101",
             "country": "United States"
-          },
-          "specialInstructions": "Standard ground delivery."
+          }
         }
       },
       "campaignName": "gamingforher",
@@ -216,7 +197,6 @@
         "completedAuctions": 4,
         "listedAuctions": 7,
         "winnerName": "Charity Supporter #2",
-        "winnerEmail": "supporter2@example.com",
         "shippingAddress": {
           "recipientName": "Charity Supporter #2",
           "addressLine1": "250 Champion Ave",
@@ -224,8 +204,7 @@
           "region": "WA",
           "postalCode": "98101",
           "country": "United States"
-        },
-        "specialInstructions": "Standard ground delivery."
+        }
       }
     },
     {
@@ -233,20 +212,18 @@
       "tiltifyId": "lot-1-9e9a27c5-06a9-4961-bb76-e15e36cac230",
       "eventType": "auction_ended",
       "donorName": "Dakman",
-      "donorEmail": "dakman.winner@example.com",
       "amount": 65,
       "currency": "USD",
       "auction": {
         "auctionId": "lot-1-9e9a27c5-06a9-4961-bb76-e15e36cac230",
-        "itemTitle": "Charity Auction Prize #1 - Winning Lot",
-        "itemDescription": "Charity Auction Lot #1 winning bid ($65.00). Physical prize parcel requiring fulfillment & shipping.",
+        "itemTitle": "Luffy x Round1 Promo Card",
+        "itemDescription": "Luffy x Round1 Promo Card winning bid ($65.00). Physical prize parcel requiring fulfillment & shipping.",
         "winningBid": 65,
         "currency": "USD",
         "winnerName": "Dakman",
-        "winnerEmail": "dakman.winner@example.com",
         "endedAt": "2026-09-17T06:50:08.041748Z",
         "prizeType": "physical",
-        "prizeDetails": "Charity Auction Prize #1 - Winning Lot",
+        "prizeDetails": "Luffy x Round1 Promo Card",
         "shippingAddress": {
           "recipientName": "Dakman",
           "addressLine1": "100 Charity Way",
@@ -255,7 +232,6 @@
           "postalCode": "97201",
           "country": "United States"
         },
-        "specialInstructions": "Handle with care. Priority charity shipping parcel.",
         "shippingStatus": "pending",
         "rawItem": {
           "campaignId": "9e9a27c5-06a9-4961-bb76-e15e36cac230",
@@ -265,7 +241,6 @@
           "completedAuctions": 4,
           "listedAuctions": 7,
           "winnerName": "Dakman",
-          "winnerEmail": "dakman.winner@example.com",
           "shippingAddress": {
             "recipientName": "Dakman",
             "addressLine1": "100 Charity Way",
@@ -273,8 +248,7 @@
             "region": "OR",
             "postalCode": "97201",
             "country": "United States"
-          },
-          "specialInstructions": "Handle with care. Priority charity shipping parcel."
+          }
         }
       },
       "campaignName": "gamingforher",
@@ -292,7 +266,6 @@
         "completedAuctions": 4,
         "listedAuctions": 7,
         "winnerName": "Dakman",
-        "winnerEmail": "dakman.winner@example.com",
         "shippingAddress": {
           "recipientName": "Dakman",
           "addressLine1": "100 Charity Way",
@@ -300,8 +273,7 @@
           "region": "OR",
           "postalCode": "97201",
           "country": "United States"
-        },
-        "specialInstructions": "Handle with care. Priority charity shipping parcel."
+        }
       }
     },
     {
