@@ -317,12 +317,21 @@ function loadConfigFromDisk() {
           ...state.discord,
           ...parsed.discord,
         };
+        // Environment variables always override file configuration for security
+        if (process.env.DISCORD_BOT_TOKEN) state.discord.botToken = process.env.DISCORD_BOT_TOKEN.trim();
+        if (process.env.DISCORD_CHANNEL_ID) state.discord.channelId = process.env.DISCORD_CHANNEL_ID.trim();
+        if (process.env.DISCORD_WEBHOOK_URL) state.discord.webhookUrl = process.env.DISCORD_WEBHOOK_URL.trim();
       }
       if (parsed.tiltify && typeof parsed.tiltify === "object") {
         state.tiltify = {
           ...state.tiltify,
           ...parsed.tiltify,
         };
+        // Environment variables always override file configuration for security
+        if (process.env.TILTIFY_CLIENT_ID) state.tiltify.clientId = process.env.TILTIFY_CLIENT_ID.trim();
+        if (process.env.TILTIFY_CLIENT_SECRET) state.tiltify.clientSecret = process.env.TILTIFY_CLIENT_SECRET.trim();
+        if (process.env.TILTIFY_API_TOKEN) state.tiltify.apiToken = process.env.TILTIFY_API_TOKEN.trim();
+        if (process.env.TILTIFY_CAMPAIGN_ID) state.tiltify.campaignId = process.env.TILTIFY_CAMPAIGN_ID.trim();
       }
 
       // Restore custom images from disk binaries
