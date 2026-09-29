@@ -1,0 +1,29 @@
+name: Auto-Sync Tiltify Soonest Auction to Short.io
+
+on:
+  schedule:
+    # Runs automatically every 10 minutes (100% free forever)
+    - cron: '*/10 * * * *'
+  # Lets you press a button to test/run it manually anytime!
+  workflow_dispatch:
+
+jobs:
+  sync-auction:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Auction Sync Script
+        env:
+          SHORT_IO_API_KEY: ${{ secrets.SHORT_IO_API_KEY }}
+          SHORT_IO_LINK_ID: ${{ secrets.SHORT_IO_LINK_ID }}
+          TILTIFY_CAMPAIGN_ID: ${{ secrets.TILTIFY_CAMPAIGN_ID }}
+        run: |
+          npm install axios
+          node sync-auction.js
