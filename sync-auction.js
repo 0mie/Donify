@@ -75,7 +75,7 @@ async function run() {
   }
 
   // ✏️ Custom message
-  const customMessage = "Supporting 0mie's Charity Drive on Tiltify! Click to place your bid.";
+  const customMessage = "Supporting Omie's Charity Drive on Tiltify! Click to place your bid.";
 
   // Title: Clean item name + Bid + Time
   const shortName = rawItemName.length > 26 ? rawItemName.substring(0, 24) + '...' : rawItemName;
