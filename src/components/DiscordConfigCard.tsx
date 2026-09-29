@@ -618,30 +618,10 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
               </div>
             </div>
 
-            {/* Mode Toggle */}
-            <div className="flex items-center p-1 bg-neutral-950 rounded-xl border border-neutral-800 text-xs">
-              <button
-                type="button"
-                onClick={() => handleInputChange('mode', 'webhook')}
-                className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                  localConfig.mode === 'webhook'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                Webhook (Recommended)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInputChange('mode', 'bot')}
-                className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                  localConfig.mode === 'bot'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                Bot Token
-              </button>
+            {/* Destination Mode Badge */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-950 rounded-xl border border-neutral-800 text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="font-medium text-neutral-300">Webhook Delivery</span>
             </div>
           </div>
 
@@ -660,22 +640,7 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
               )}
               <div className="flex-1 font-medium space-y-1.5">
                 <div>{statusMessage.text}</div>
-                {localConfig.mode === 'bot' && localConfig.webhookUrl && (statusMessage.text.includes('10003') || statusMessage.text.includes('Unknown Channel')) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleInputChange('mode', 'webhook');
-                      setStatusMessage({
-                        type: 'success',
-                        text: 'Switched to Webhook mode! Click "Save Configuration" or "Send Live Discord Test" to send directly.',
-                      });
-                    }}
-                    className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors mt-1"
-                  >
-                    Switch to Webhook (Recommended)
-                  </button>
-                )}
-                {localConfig.mode === 'webhook' && localConfig.webhookUrl?.includes('discord.com') && (statusMessage.text.includes('1015') || statusMessage.text.includes('discordapp.com') || statusMessage.text.includes('429')) && (
+                {localConfig.webhookUrl?.includes('discord.com') && (statusMessage.text.includes('1015') || statusMessage.text.includes('discordapp.com') || statusMessage.text.includes('429')) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -718,8 +683,8 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                   : 'text-neutral-400 hover:text-white'
               }`}
             >
-              <Bot className="w-3.5 h-3.5" />
-              <span className="truncate">Bot &amp; Webhook</span>
+              <Link2 className="w-3.5 h-3.5" />
+              <span className="truncate">Webhook &amp; Bot Info</span>
             </button>
             <button
               type="button"
@@ -1544,77 +1509,40 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
               </div>
             )}
 
-            {/* 🔌 BOT & WEBHOOK CONNECTION TAB */}
+            {/* 🔌 DISCORD WEBHOOK & BOT INFO TAB */}
             {formTab === 'connection' && (
               <div className="space-y-4">
-                {localConfig.mode === 'webhook' ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
-                        Discord Webhook URL <span className="text-rose-400">*</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setShowSecrets(!showSecrets)}
-                        className="text-xs text-neutral-400 hover:text-neutral-200 flex items-center gap-1"
-                      >
-                        {showSecrets ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        {showSecrets ? 'Mask' : 'Show'}
-                      </button>
-                    </div>
-                    <input
-                      type={showSecrets ? 'text' : 'password'}
-                      value={localConfig.webhookUrl}
-                      onChange={(e) => handleInputChange('webhookUrl', e.target.value)}
-                      placeholder="https://discord.com/api/webhooks/1234567890/abcdef..."
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                      required
-                    />
-                    <p className="text-[11px] text-neutral-400 mt-1">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
+                      Discord Webhook URL <span className="text-rose-400">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowSecrets(!showSecrets)}
+                      className="text-xs text-neutral-400 hover:text-neutral-200 flex items-center gap-1"
+                    >
+                      {showSecrets ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      {showSecrets ? 'Mask' : 'Show'}
+                    </button>
+                  </div>
+                  <input
+                    type={showSecrets ? 'text' : 'password'}
+                    value={localConfig.webhookUrl}
+                    onChange={(e) => handleInputChange('webhookUrl', e.target.value)}
+                    placeholder="https://discord.com/api/webhooks/1234567890/abcdef..."
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                    required
+                  />
+                  <div className="flex items-start justify-between gap-2 mt-1.5 text-[11px] text-neutral-400">
+                    <p>
                       Obtain from Discord Channel Settings &rarr; Integrations &rarr; Webhooks &rarr; Copy Webhook URL.
                     </p>
+                    <span className="text-neutral-500 shrink-0 font-mono text-[10px]">
+                      Or set DISCORD_WEBHOOK_URL in Render
+                    </span>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
-                          Discord Bot Token <span className="text-rose-400">*</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setShowSecrets(!showSecrets)}
-                          className="text-xs text-neutral-400 hover:text-neutral-200 flex items-center gap-1"
-                        >
-                          {showSecrets ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          {showSecrets ? 'Mask' : 'Show'}
-                        </button>
-                      </div>
-                      <input
-                        type={showSecrets ? 'text' : 'password'}
-                        value={localConfig.botToken}
-                        onChange={(e) => handleInputChange('botToken', e.target.value)}
-                        placeholder="MTA5OTg2NzA4... (Bot Token)"
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block mb-1">
-                        Destination Channel ID <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={localConfig.channelId}
-                        onChange={(e) => handleInputChange('channelId', e.target.value)}
-                        placeholder="e.g. 102938475612345678"
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
+                </div>
 
                 {/* Bot Identity */}
                 <div className="pt-3 border-t border-neutral-800/80 space-y-4">

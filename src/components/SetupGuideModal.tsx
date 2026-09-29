@@ -103,15 +103,15 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
               </ol>
 
               <div className="border-t border-neutral-800 pt-4">
-                <h4 className="font-medium text-white mb-2">Method 2: Discord Bot Token & Channel ID</h4>
+                <h4 className="font-medium text-white mb-2">Hiding Secrets in Render (Never Commit Tokens to GitHub)</h4>
                 <p className="text-xs text-neutral-400 mb-2">
-                  If you already have a registered Discord Application Bot on Discord Developer Portal:
+                  To keep your Discord webhook or credentials 100% private in a public GitHub repository, configure them in your Render Dashboard:
                 </p>
                 <ul className="list-disc list-inside text-xs text-neutral-400 space-y-1">
-                  <li>Get your Bot Token from <code className="text-neutral-300">discord.com/developers/applications</code> &rarr; Bot &rarr; Reset Token.</li>
-                  <li>Enable Developer Mode in Discord (User Settings &rarr; Advanced &rarr; Developer Mode).</li>
-                  <li>Right-click your desired text channel and click <span className="text-neutral-200">Copy Channel ID</span>.</li>
-                  <li>Make sure the bot is invited to your server with <span className="text-neutral-200">Send Messages</span> and <span className="text-neutral-200">Embed Links</span> permissions.</li>
+                  <li>In Render &rarr; Your Service &rarr; <span className="text-neutral-200">Environment</span>.</li>
+                  <li>Add <code className="text-indigo-300">DISCORD_WEBHOOK_URL</code>: paste your webhook URL.</li>
+                  <li>Optional Bot credentials: <code className="text-indigo-300">DISCORD_BOT_TOKEN</code> and <code className="text-indigo-300">DISCORD_CHANNEL_ID</code>.</li>
+                  <li>Render securely injects these values directly into the server without saving them to any files or GitHub!</li>
                 </ul>
               </div>
 

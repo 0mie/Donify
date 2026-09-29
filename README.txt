@@ -15,11 +15,12 @@ TABLE OF CONTENTS
 1. What You Need Before You Begin
 2. Step 1: Create a Discord Webhook (Takes 1 Minute)
 3. Step 2: Deploy to Render for Free
-4. Step 3: Protect Your Bot with an Admin Passcode
-5. Step 4: Connect Tiltify (Instant Webhook)
-6. Step 5: Keep Your Bot Awake 24/7 (Free Ping Setup)
-7. Step 6: Test Your Alerts
-8. Troubleshooting & FAQ
+4. Step 3: Configure Environment Secrets in Render (CRITICAL FOR PUBLIC REPOS)
+5. Step 4: Protect Your Bot with an Admin Passcode
+6. Step 5: Connect Tiltify (Instant Webhook)
+7. Step 6: Keep Your Bot Awake 24/7 (Free Ping Setup)
+8. Step 7: Test Your Alerts
+9. Troubleshooting & FAQ
 
 ================================================================================
 1. WHAT YOU NEED BEFORE YOU BEGIN
@@ -43,7 +44,7 @@ A webhook is a secure link that allows this bot to post messages in your Discord
 5. Click "Webhooks", then click "New Webhook" (or "Create Webhook").
 6. Give it a name (for example: "Tiltify Alerts").
 7. Click "Copy Webhook URL".
-8. Keep this URL handy — you will paste it into your bot dashboard!
+8. Keep this URL handy — you will paste it into your Render Environment variables!
    (It looks like: https://discord.com/api/webhooks/123456789/abcdefgh...)
 
 ================================================================================
@@ -61,31 +62,51 @@ A webhook is a secure link that allows this bot to post messages in your Discord
    - Build Command: npm install && npm run build
    - Start Command: npm start
    - Instance Type: Free ($0/month)
-6. Click "Deploy Web Service".
-7. Wait 2 to 3 minutes until Render shows "Live" with a green checkmark.
-8. Look right beneath your service title to find your bot's public URL:
-   Example: https://my-tiltify-bot.onrender.com
+6. DO NOT click "Deploy" yet — proceed to Step 3 below to add your secrets!
 
 ================================================================================
-4. STEP 3: PROTECT YOUR BOT WITH AN ADMIN PASSCODE
+4. STEP 3: CONFIGURE ENVIRONMENT SECRETS IN RENDER (CRITICAL FOR PUBLIC REPOS)
 ================================================================================
-To stop strangers on the internet from changing your webhook or campaign settings:
+To keep your Discord webhook, bot tokens, and Tiltify secrets 100% private and 
+never exposed in your public GitHub repository:
 
-Option A (From the Dashboard):
+1. In your Render Web Service settings, scroll down to the "Environment Variables" section
+   (or click "Environment" in the left sidebar after creating the service).
+2. Add the following environment variables:
+
+   KEY:                      VALUE:
+   -----------------------------------------------------------------------------
+   DISCORD_WEBHOOK_URL       https://discord.com/api/webhooks/1234... (your webhook)
+   ADMIN_PASSWORD            YourSecretPasscode123 (locks dashboard settings)
+   TILTIFY_CAMPAIGN_ID       Your Tiltify Campaign ID (optional if using webhook)
+
+3. (Optional for Bot Mode only):
+   If you use a Discord Bot Application instead of a Webhook:
+   DISCORD_BOT_TOKEN         Your Discord Bot Token from developer portal
+   DISCORD_CHANNEL_ID        Your Discord Channel ID (numeric)
+
+4. (Optional for Tiltify API Polling):
+   TILTIFY_CLIENT_ID         Your Tiltify App Client ID
+   TILTIFY_CLIENT_SECRET     Your Tiltify App Client Secret
+
+5. Click "Save Changes" (or "Create Web Service").
+Render will securely encrypt these values. They will NEVER be visible in your GitHub 
+repository, code files, or public web pages!
+
+================================================================================
+5. STEP 4: PROTECT YOUR BOT WITH AN ADMIN PASSCODE
+================================================================================
+If you set the ADMIN_PASSWORD environment variable in Step 3, your bot is already 
+fully locked!
+
+To change or set your passcode from the web dashboard:
 1. Open your Render bot URL in your browser.
 2. Click the amber "Set Passcode" button in the top navigation bar.
 3. Type a passcode (4+ characters or a PIN) and click "Set Passcode & Lock".
 4. Your browser will remember you, while other visitors will see a clean lock screen.
 
-Option B (Directly in Render):
-1. In your Render Dashboard, go to your Web Service -> "Environment".
-2. Add an environment variable:
-   Key:   ADMIN_PASSWORD
-   Value: YourSecretPasscode123
-3. Click "Save Changes".
-
 ================================================================================
-5. STEP 4: CONNECT TILTIFY (INSTANT WEBHOOK)
+6. STEP 5: CONNECT TILTIFY (INSTANT WEBHOOK)
 ================================================================================
 Tiltify can notify your bot the exact second someone donates!
 
@@ -105,7 +126,7 @@ Tiltify can notify your bot the exact second someone donates!
 Tiltify will now send every donation directly to your bot!
 
 ================================================================================
-6. STEP 5: KEEP YOUR BOT AWAKE 24/7 (FREE PING SETUP)
+7. STEP 6: KEEP YOUR BOT AWAKE 24/7 (FREE PING SETUP)
 ================================================================================
 Render's free tier puts inactive apps to sleep after 15 minutes of silence. 
 Setting up a free 10-minute ping prevents your bot from ever sleeping so alerts 
@@ -128,7 +149,7 @@ arrive with ZERO delay.
   your ping will work 24/7 without issues.
 
 ================================================================================
-7. STEP 6: TEST YOUR ALERTS
+8. STEP 7: TEST YOUR ALERTS
 ================================================================================
 You don't have to wait for a real donation to verify everything works:
 
@@ -141,11 +162,16 @@ You don't have to wait for a real donation to verify everything works:
    - Test Tiltify Auction House notifications (winning bidder, delivery address).
 
 ================================================================================
-8. TROUBLESHOOTING & FAQ
+9. TROUBLESHOOTING & FAQ
 ================================================================================
 Q: My Discord test alert didn't show up.
-A: Check that your Discord Webhook URL is pasted accurately in the Discord 
-   Settings tab and that the channel still exists.
+A: Check that your DISCORD_WEBHOOK_URL is configured in Render Environment 
+   Variables (or pasted in the Discord Webhook & Bot Info tab).
+
+Q: Why shouldn't I commit data/app-config.json to GitHub?
+A: That file stores local dashboard settings. It is already added to .gitignore 
+   so your tokens and webhooks will never leak to GitHub. Always use Render's 
+   Environment Variables for private secrets.
 
 Q: cron-job.org failed or sent me a failure email.
 A: 1. Check that the URL begins with "https://" (http will cause a 301 error).
@@ -158,8 +184,9 @@ A: No! The passcode only protects the settings dashboard from unauthorized
    (/api/status) are always open and functional.
 
 Q: How do I change my bot's name or avatar?
-A: In the Discord Settings tab, customize the "Bot Display Name" and upload any 
-   custom PNG/JPEG or choose your favorite embed theme color.
+A: In the "Visual Customizer" or "Webhook & Bot Info" tab, customize the 
+   "Bot Display Name" and upload any custom PNG/JPEG or choose your favorite 
+   embed theme color.
 
 ================================================================================
 Enjoy your automated Tiltify donation alerts!
