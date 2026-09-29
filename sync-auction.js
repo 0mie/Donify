@@ -112,10 +112,10 @@ async function run() {
   <title>${fullTitle}</title>
   
   <!-- Canonical & OpenGraph -->
-  <link rel="canonical" href="https://0mie4.kids/auctions">
+  <link rel="canonical" href="https://0mie4.kids/">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://0mie4.kids/auctions">
-  <meta property="og:site_name" content="0mie4.kids/auctions">
+  <meta property="og:url" content="https://0mie4.kids/">
+  <meta property="og:site_name" content="0mie4.kids">
   <meta property="og:title" content="${fullTitle}">
   <meta property="og:description" content="${fullDescription}">
   <meta property="og:image" content="${imageUrl}">
@@ -124,7 +124,7 @@ async function run() {
   
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:domain" content="0mie4.kids/auctions">
+  <meta name="twitter:domain" content="0mie4.kids">
   <meta name="twitter:title" content="${fullTitle}">
   <meta name="twitter:description" content="${fullDescription}">
   <meta name="twitter:image" content="${imageUrl}">
