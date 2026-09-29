@@ -1,5 +1,5 @@
 // sync-auction.js
-// Official Tiltify v5 Client Credentials OAuth + Auction House API
+// Tiltify v5 Official API + Short.io Dynamic OpenGraph Cards
 async function run() {
   const clientId = process.env.TILTIFY_CLIENT_ID;
   const clientSecret = process.env.TILTIFY_CLIENT_SECRET;
@@ -10,19 +10,19 @@ async function run() {
     .filter(Boolean);
 
   if (!clientId || !clientSecret) {
-    console.error('❌ Missing TILTIFY_CLIENT_ID or TILTIFY_CLIENT_SECRET in GitHub Secrets.');
+    console.error('❌ Missing TILTIFY_CLIENT_ID or TILTIFY_CLIENT_SECRET.');
     process.exit(1);
   }
 
   if (!shortIoKey || shortIoLinkIds.length === 0) {
-    console.error('❌ Missing Short.io secrets in GitHub Settings.');
+    console.error('❌ Missing Short.io secrets.');
     process.exit(1);
   }
 
   console.log('🔑 Authenticating with Tiltify OAuth v5 API...');
 
   try {
-    // 1. Get OAuth Access Token via Client Credentials
+    // 1. Get OAuth Access Token
     const tokenRes = await fetch('https://v5api.tiltify.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -38,78 +38,72 @@ async function run() {
     });
 
     if (!tokenRes.ok) {
-      const errText = await tokenRes.text();
-      throw new Error(`Tiltify OAuth authentication failed: ${tokenRes.status} - ${errText}`);
+      throw new Error(`Tiltify OAuth failed: ${tokenRes.status}`);
     }
 
-    const tokenData = await tokenRes.json();
-    const accessToken = tokenData.access_token;
+    const { access_token } = await tokenRes.json();
     console.log('✅ Tiltify token obtained successfully!');
 
-    // 2. Fetch Auction House data for @0mie/2026-auctions
-    console.log('📡 Fetching Auction House (@0mie/2026-auctions)...');
-    const houseRes = await fetch('https://v5api.tiltify.com/api/public/auction_houses/by/user/slugs/0mie/2026-auctions', {
+    // 2. Fetch Auction Items using Auction House ID
+    const houseId = 'fc5ad221-74fc-48c8-975c-c5b1f41aadf7';
+    console.log(`📡 Fetching items from Auction House ID: ${houseId}...`);
+    
+    // Official Tiltify v5 endpoint: /auction_items
+    const itemsRes = await fetch(`https://v5api.tiltify.com/api/public/auction_houses/${houseId}/auction_items`, {
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${access_token}`,
         'Accept': 'application/json'
       }
     });
 
-    if (!houseRes.ok) {
-      const errText = await houseRes.text();
-      throw new Error(`Failed to fetch auction house: ${houseRes.status} - ${errText}`);
+    if (!itemsRes.ok) {
+      throw new Error(`Failed to fetch auction items: ${itemsRes.status} ${itemsRes.statusText}`);
     }
 
-    const houseJson = await houseRes.json();
-    const house = houseJson.data || houseJson;
-    console.log(`🏛️ Connected to Auction House: "${house.name || '2026-auctions'}" (ID: ${house.id})`);
-
-    // 3. Fetch auction items
-    const itemsRes = await fetch(`https://v5api.tiltify.com/api/public/auction_houses/${house.id}/items`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    let items = [];
-    if (itemsRes.ok) {
-      const itemsJson = await itemsRes.json();
-      items = itemsJson.data || itemsJson || [];
-    } else {
-      items = house.auction_items || house.items || [];
-    }
+    const itemsJson = await itemsRes.json();
+    const items = itemsJson.data || itemsJson || [];
 
     console.log(`📦 Found ${items.length} total auction items.`);
 
     if (items.length === 0) {
-      console.log('ℹ️ No active auctions yet. Leaving Short.io link pointing to main auction page.');
+      console.log('ℹ️ No auction items found.');
       return;
     }
 
-    // 4. Filter active auctions and sort by ending soonest
+    // 3. Filter active auctions and sort by ending soonest
     const now = new Date();
     const active = items.filter(item => {
       const end = item.ends_at || item.endsAt || item.end_date;
       return end ? new Date(end) > now : true;
     });
 
-    const candidateList = active.length > 0 ? active : items;
-    const soonest = candidateList.sort((a, b) => {
+    const candidates = active.length > 0 ? active : items;
+    const soonest = candidates.sort((a, b) => {
       const dateA = new Date(a.ends_at || a.endsAt || a.end_date || 0);
       const dateB = new Date(b.ends_at || b.endsAt || b.end_date || 0);
       return dateA - dateB;
     })[0];
 
-    const itemName = soonest.name || soonest.title || 'Live Charity Auction';
-    const bidValue = soonest.current_bid || soonest.currentBid || soonest.starting_bid || 0;
-    const targetUrl = soonest.url || `https://tiltify.com/@0mie/auctions/2026-auctions`;
+    // Extract item details
+    const itemName = soonest.name || soonest.title || 'Charity Auction Item';
+    const bidAmount = soonest.current_bid?.value || soonest.current_bid || soonest.starting_bid?.value || soonest.starting_bid || 0;
+    const imageUrl = soonest.image?.src || soonest.image_url || soonest.image?.url || soonest.avatar?.src || '';
+    
+    // Build direct link to this specific auction item
+    const itemSlug = soonest.slug || soonest.id;
+    const targetUrl = itemSlug 
+      ? `https://tiltify.com/@0mie/auctions/2026-auctions/${itemSlug}`
+      : `https://tiltify.com/@0mie/auctions/2026-auctions`;
 
-    console.log(`🎯 Soonest Ending Item: "${itemName}"`);
-    console.log(`💰 High Bid: $${bidValue}`);
-    console.log(`🔗 Target URL: ${targetUrl}`);
+    const titleText = `🔥 Ending Soonest: ${itemName} ($${bidAmount})`;
+    const descriptionText = `Live charity auction on Tiltify! Current Bid: $${bidAmount}. Bid now before it ends!`;
 
-    // 5. Update Short.io link(s) (handles primary + typo domain)
+    console.log(`🎯 Soonest Item: "${itemName}"`);
+    console.log(`💰 Current Bid: $${bidAmount}`);
+    console.log(`🖼️ Image: ${imageUrl || 'None'}`);
+    console.log(`🔗 Destination: ${targetUrl}`);
+
+    // 4. Update Short.io links (Original URL + Title)
     for (const linkId of shortIoLinkIds) {
       const updateRes = await fetch(`https://api.short.io/links/${linkId}`, {
         method: 'POST',
@@ -119,20 +113,40 @@ async function run() {
         },
         body: JSON.stringify({
           originalURL: targetUrl,
-          title: `🔥 Ending Soonest: ${itemName} ($${bidValue})`
+          title: titleText
         })
       });
 
       if (!updateRes.ok) {
-        const err = await updateRes.text();
-        console.error(`⚠️ Failed to update Short.io ${linkId}: ${updateRes.status} - ${err}`);
+        console.error(`⚠️ Short.io update failed for ${linkId}: ${updateRes.status}`);
       } else {
         const data = await updateRes.json();
-        console.log(`🎉 Successfully updated Short.io link ${linkId} -> ${data.shortURL}`);
+        console.log(`🎉 Short.io URL updated: ${linkId} -> ${data.shortURL}`);
+      }
+
+      // 5. Update OpenGraph Social Preview Meta Tags (Images + Rich Card)
+      if (imageUrl) {
+        try {
+          await fetch(`https://api.short.io/links/${linkId}/opengraph`, {
+            method: 'PUT',
+            headers: {
+              'authorization': shortIoKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              title: titleText,
+              description: descriptionText,
+              imageURL: imageUrl
+            })
+          });
+          console.log(`🖼️ OpenGraph preview card updated with auction image for ${linkId}`);
+        } catch (ogErr) {
+          console.log('OpenGraph update note:', ogErr.message);
+        }
       }
     }
 
-    console.log('🚀 All links synchronized successfully!');
+    console.log('🚀 Finished synchronization!');
 
   } catch (error) {
     console.error('❌ Sync error:', error.message);
