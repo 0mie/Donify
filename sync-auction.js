@@ -58,7 +58,8 @@ async function run() {
     timeText = hours > 24 ? `⏳ Ends in ${Math.floor(hours / 24)}d ${hours % 24}h` : `⏳ Ends in ${hours}h ${minutes}m`;
   }
 
-  const fancyTitle = `🔥 ${itemName} | Current Bid: $${bidAmount}`;
+  // Put the live timer directly into the title badge so Twitter/X displays it!
+  const fancyTitle = `⏳ ${timeText.replace('⏳ Ends in ', '')} left • ${itemName} • Bid: $${bidAmount}`;
   const fancyDescription = `${timeText} • Supporting Omie's Charity Drive on Tiltify! Click to bid.`;
 
 // Point Short.io links to your live rich card gateway!
@@ -78,6 +79,7 @@ async function run() {
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta name="twitter:title" content="${fancyTitle}">
   <meta charset="UTF-8">
   <title>${fancyTitle}</title>
   <meta name="description" content="${fancyDescription}">
