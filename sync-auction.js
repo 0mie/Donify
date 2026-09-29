@@ -74,14 +74,12 @@ async function run() {
     timeText = hours > 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h left` : `${hours}h ${minutes}m left`;
   }
 
-  // ✏️ EDIT YOUR CUSTOM MESSAGE HERE:
-  const customMessage = "Supporting Omie's Charity Drive on Tiltify! Click to place your bid.";
+  // ✏️ Custom message
+  const customMessage = "Supporting 0mie's Charity Drive on Tiltify! Click to place your bid.";
 
-  // Title with Item Name + Bid + Time (so Facebook, Twitter, LinkedIn never lose the bid/time)
+  // Title: Clean item name + Bid + Time
   const shortName = rawItemName.length > 26 ? rawItemName.substring(0, 24) + '...' : rawItemName;
   const fullTitle = `${shortName} • Bid: $${bidAmount} • ⏳ ${timeText}`;
-
-  // Description for Discord, WhatsApp, Facebook
   const fullDescription = `Bid: $${bidAmount} • ⏳ ${timeText} | ${customMessage}`;
 
   const gatewayUrl = 'https://0mie.github.io/Donify/';
@@ -106,14 +104,15 @@ async function run() {
     } catch (e) {}
   }
 
-  // 2. Generate Rich HTML Meta Page
+  // 2. Generate Rich HTML Meta Page with pure "0mie4.kids" attribution
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>${fullTitle}</title>
   
-  <!-- OpenGraph: Facebook, LinkedIn, Discord, WhatsApp -->
+  <!-- Canonical & OpenGraph -->
+  <link rel="canonical" href="https://0mie4.kids/auctions">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://0mie4.kids/auctions">
   <meta property="og:site_name" content="0mie4.kids/auctions">
@@ -125,7 +124,7 @@ async function run() {
   
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:domain" content="0mie4.kids">
+  <meta name="twitter:domain" content="0mie4.kids/auctions">
   <meta name="twitter:title" content="${fullTitle}">
   <meta name="twitter:description" content="${fullDescription}">
   <meta name="twitter:image" content="${imageUrl}">
@@ -148,7 +147,7 @@ async function run() {
 
   fs.mkdirSync('./public', { recursive: true });
   fs.writeFileSync('./public/index.html', htmlContent);
-  console.log('✅ Generated clean rich preview cards for all platforms!');
+  console.log('✅ Generated clean rich preview cards with 0mie4.kids attribution!');
 }
 
 run();
