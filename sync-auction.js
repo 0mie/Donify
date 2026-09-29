@@ -61,13 +61,15 @@ async function run() {
   const fancyTitle = `🔥 ${itemName} | Current Bid: $${bidAmount}`;
   const fancyDescription = `${timeText} • Supporting Omie's Charity Drive on Tiltify! Click to bid.`;
 
-  // 1. Update Short.io destination
+// Point Short.io links to your live rich card gateway!
+  const gatewayUrl = 'https://0mie.github.io/Donify/';
+
   for (const linkId of shortIoLinkIds) {
     try {
       await fetch(`https://api.short.io/links/${linkId}`, {
         method: 'POST',
         headers: { 'authorization': shortIoKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ originalURL: targetUrl, title: fancyTitle })
+        body: JSON.stringify({ originalURL: gatewayUrl, title: fancyTitle })
       });
     } catch (e) {}
   }
