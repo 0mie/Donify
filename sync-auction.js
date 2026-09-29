@@ -27,9 +27,7 @@ async function run() {
     })
   });
 
-  if (!tokenRes.ok) {
-    throw new Error(`Tiltify OAuth failed: ${tokenRes.status}`);
-  }
+  if (!tokenRes.ok) throw new Error(`Tiltify OAuth failed: ${tokenRes.status}`);
   const { access_token } = await tokenRes.json();
 
   console.log('📡 Fetching auction items...');
@@ -38,10 +36,7 @@ async function run() {
     headers: { 'Authorization': `Bearer ${access_token}`, 'Accept': 'application/json' }
   });
 
-  if (!itemsRes.ok) {
-    throw new Error(`Failed to fetch auction items: ${itemsRes.status}`);
-  }
-
+  if (!itemsRes.ok) throw new Error(`Failed to fetch auction items: ${itemsRes.status}`);
   const itemsJson = await itemsRes.json();
   const items = itemsJson.data || itemsJson || [];
 
@@ -79,15 +74,20 @@ async function run() {
     timeText = hours > 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h left` : `${hours}h ${minutes}m left`;
   }
 
-  // Crisp standard text formatting
-  const cleanItemName = rawItemName.length > 28 ? rawItemName.substring(0, 26) + '...' : rawItemName;
-  const cardTitle = `${cleanItemName} • Bid: $${bidAmount} • ⏳ ${timeText}`;
-  const cardDescription = `Bid: $${bidAmount} • ⏳ ${timeText} | Supporting Omie's Charity Drive on Tiltify! Click to bid.`;
+  // --- STACKED LINE DEFINITIONS ---
+  // Line 1: Item Name
+  const line1Title = rawItemName;
+  // Line 2: Stacked Bid & Countdown Subtitle
+  const line2Stacked = `Bid: $${bidAmount} • ⏳ ${timeText}`;
+
+  // Compact title for Twitter's single-line badge so nothing gets cut off
+  const shortName = rawItemName.length > 25 ? rawItemName.substring(0, 23) + '...' : rawItemName;
+  const twitterCompactTitle = `${shortName} | Bid: $${bidAmount} • ⏳ ${timeText}`;
+
   const gatewayUrl = 'https://0mie.github.io/Donify/';
 
-  console.log(`🎯 Title: ${cardTitle}`);
-  console.log(`🖼️ Image: ${imageUrl}`);
-  console.log(`🔗 Target: ${targetUrl}`);
+  console.log(`🎯 Line 1 (Title): ${line1Title}`);
+  console.log(`⏱️ Line 2 (Subtitle): ${line2Stacked}`);
 
   // 1. Update Short.io
   for (const linkId of shortIoLinkIds) {
@@ -100,38 +100,38 @@ async function run() {
         },
         body: JSON.stringify({
           originalURL: gatewayUrl,
-          title: cardTitle
+          title: `${shortName} | $${bidAmount}`
         })
       });
-    } catch (e) {
-      console.log('Short.io note:', e.message);
-    }
+    } catch (e) {}
   }
 
-  // 2. Generate Rich HTML Meta Page
+  // 2. Generate Rich HTML Meta Page with Cleanly Stacked Lines
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${cardTitle}</title>
+  <title>${line1Title}</title>
   <link rel="canonical" href="https://0mie4.kids/auctions">
-  <meta name="description" content="${cardDescription}">
   
-  <!-- OpenGraph (Facebook, WhatsApp, Discord, LinkedIn) -->
+  <!-- Line 2: Stacked Subtitle (Discord / WhatsApp / Facebook) -->
+  <meta name="description" content="${line2Stacked}">
+  
+  <!-- OpenGraph Card -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://0mie4.kids/auctions">
-  <meta property="og:site_name" content="0mie4.kids">
-  <meta property="og:title" content="${cardTitle}">
-  <meta property="og:description" content="${cardDescription}">
+  <meta property="og:site_name" content="0mie4.kids/auctions">
+  <!-- Line 1: Title Header -->
+  <meta property="og:title" content="${line1Title}">
+  <!-- Line 2: Subtitle Line -->
+  <meta property="og:description" content="${line2Stacked}">
   <meta property="og:image" content="${imageUrl}">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
   
-  <!-- Twitter / X -->
+  <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:domain" content="0mie4.kids">
-  <meta name="twitter:title" content="${cardTitle}">
-  <meta name="twitter:description" content="${cardDescription}">
+  <meta name="twitter:title" content="${twitterCompactTitle}">
+  <meta name="twitter:description" content="${line2Stacked}">
   <meta name="twitter:image" content="${imageUrl}">
   
   <!-- Instant Redirect for Humans to Tiltify -->
@@ -144,7 +144,7 @@ async function run() {
 </head>
 <body>
   <div>
-    <h2>Redirecting to Tiltify...</h2>
+    <h2>Redirecting you to Tiltify...</h2>
     <p><a href="${targetUrl}">Click here if not redirected automatically</a></p>
   </div>
 </body>
@@ -152,7 +152,7 @@ async function run() {
 
   fs.mkdirSync('./public', { recursive: true });
   fs.writeFileSync('./public/index.html', htmlContent);
-  console.log('✅ Generated clean rich card preview!');
+  console.log('✅ Generated clean stacked cards!');
 }
 
 run();
