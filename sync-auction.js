@@ -64,7 +64,7 @@ async function run() {
   const itemSlug = soonest.slug || soonest.id;
   const targetUrl = `https://tiltify.com/@0mie/auctions/2026-auctions/${itemSlug}`;
 
-  // Time remaining
+  // Time remaining calculation
   const endDate = new Date(soonest.ends_at || soonest.endsAt || soonest.end_date || 0);
   const msLeft = endDate.getTime() - now.getTime();
   let timeText = 'Ending Soon';
@@ -74,20 +74,20 @@ async function run() {
     timeText = hours > 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h left` : `${hours}h ${minutes}m left`;
   }
 
-  // --- STACKED LINE DEFINITIONS ---
-  // Line 1: Item Name
-  const line1Title = rawItemName;
-  // Line 2: Stacked Bid & Countdown Subtitle
-  const line2Stacked = `Bid: $${bidAmount} • ⏳ ${timeText}`;
+  // ✏️ EDIT YOUR CUSTOM MESSAGE HERE:
+  const customMessage = "Supporting Omie's Charity Drive on Tiltify! Click to place your bid.";
 
-  // Compact title for Twitter's single-line badge so nothing gets cut off
-  const shortName = rawItemName.length > 25 ? rawItemName.substring(0, 23) + '...' : rawItemName;
-  const twitterCompactTitle = `${shortName} | Bid: $${bidAmount} • ⏳ ${timeText}`;
+  // Title with Item Name + Bid + Time (so Facebook, Twitter, LinkedIn never lose the bid/time)
+  const shortName = rawItemName.length > 26 ? rawItemName.substring(0, 24) + '...' : rawItemName;
+  const fullTitle = `${shortName} • Bid: $${bidAmount} • ⏳ ${timeText}`;
+
+  // Description for Discord, WhatsApp, Facebook
+  const fullDescription = `Bid: $${bidAmount} • ⏳ ${timeText} | ${customMessage}`;
 
   const gatewayUrl = 'https://0mie.github.io/Donify/';
 
-  console.log(`🎯 Line 1 (Title): ${line1Title}`);
-  console.log(`⏱️ Line 2 (Subtitle): ${line2Stacked}`);
+  console.log(`🎯 Title: ${fullTitle}`);
+  console.log(`📝 Description: ${fullDescription}`);
 
   // 1. Update Short.io
   for (const linkId of shortIoLinkIds) {
@@ -100,38 +100,34 @@ async function run() {
         },
         body: JSON.stringify({
           originalURL: gatewayUrl,
-          title: `${shortName} | $${bidAmount}`
+          title: fullTitle
         })
       });
     } catch (e) {}
   }
 
-  // 2. Generate Rich HTML Meta Page with Cleanly Stacked Lines
+  // 2. Generate Rich HTML Meta Page
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${line1Title}</title>
-  <link rel="canonical" href="https://0mie4.kids/auctions">
+  <title>${fullTitle}</title>
   
-  <!-- Line 2: Stacked Subtitle (Discord / WhatsApp / Facebook) -->
-  <meta name="description" content="${line2Stacked}">
-  
-  <!-- OpenGraph Card -->
+  <!-- OpenGraph: Facebook, LinkedIn, Discord, WhatsApp -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://0mie4.kids/auctions">
-  <meta property="og:site_name" content="0mie4.kids/auctions">
-  <!-- Line 1: Title Header -->
-  <meta property="og:title" content="${line1Title}">
-  <!-- Line 2: Subtitle Line -->
-  <meta property="og:description" content="${line2Stacked}">
+  <meta property="og:site_name" content="0mie4.kids">
+  <meta property="og:title" content="${fullTitle}">
+  <meta property="og:description" content="${fullDescription}">
   <meta property="og:image" content="${imageUrl}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:domain" content="0mie4.kids">
-  <meta name="twitter:title" content="${twitterCompactTitle}">
-  <meta name="twitter:description" content="${line2Stacked}">
+  <meta name="twitter:title" content="${fullTitle}">
+  <meta name="twitter:description" content="${fullDescription}">
   <meta name="twitter:image" content="${imageUrl}">
   
   <!-- Instant Redirect for Humans to Tiltify -->
@@ -152,7 +148,7 @@ async function run() {
 
   fs.mkdirSync('./public', { recursive: true });
   fs.writeFileSync('./public/index.html', htmlContent);
-  console.log('✅ Generated clean stacked cards!');
+  console.log('✅ Generated clean rich preview cards for all platforms!');
 }
 
 run();
