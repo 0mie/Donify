@@ -116,7 +116,7 @@ async function run() {
   <!-- OpenGraph: Facebook, LinkedIn, Discord, WhatsApp -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://0mie4.kids/auctions">
-  <meta property="og:site_name" content="0mie4.kids">
+  <meta property="og:site_name" content="0mie4.kids/auctions">
   <meta property="og:title" content="${fullTitle}">
   <meta property="og:description" content="${fullDescription}">
   <meta property="og:image" content="${imageUrl}">
