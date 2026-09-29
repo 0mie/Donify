@@ -2,6 +2,7 @@ name: Auto-Sync Tiltify Soonest Auction to Short.io
 
 on:
   schedule:
+    # Runs automatically every 10 minutes (100% free on GitHub)
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
@@ -21,5 +22,6 @@ jobs:
         env:
           SHORT_IO_API_KEY: ${{ secrets.SHORT_IO_API_KEY }}
           SHORT_IO_LINK_ID: ${{ secrets.SHORT_IO_LINK_ID }}
-          TILTIFY_CAMPAIGN_ID: ${{ secrets.TILTIFY_CAMPAIGN_ID }}
+          TILTIFY_CLIENT_ID: ${{ secrets.TILTIFY_CLIENT_ID }}
+          TILTIFY_CLIENT_SECRET: ${{ secrets.TILTIFY_CLIENT_SECRET }}
         run: node sync-auction.js
