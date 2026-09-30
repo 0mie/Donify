@@ -82,7 +82,7 @@ async function run() {
   const fullTitle = `${shortName} • Bid: $${bidAmount} • ⏳ ${timeText}`;
   const fullDescription = `Bid: $${bidAmount} • ⏳ ${timeText} | ${customMessage}`;
 
-  const gatewayUrl = 'https://0mie.github.io/Donify/';
+  const gatewayUrl = 'https://0mie4.kids/auctions';
 
   console.log(`🎯 Title: ${fullTitle}`);
   console.log(`📝 Description: ${fullDescription}`);
