@@ -82,7 +82,7 @@ async function run() {
   const fullTitle = `${shortName} • Bid: $${bidAmount} • ⏳ ${timeText}`;
   const fullDescription = `Bid: $${bidAmount} • ⏳ ${timeText} | ${customMessage}`;
 
-  const gatewayUrl = 'https://0mie4.kids/auctions';
+  const gatewayUrl = 'auction-card.donify.workers.dev';
 
   console.log(`🎯 Title: ${fullTitle}`);
   console.log(`📝 Description: ${fullDescription}`);
