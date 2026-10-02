@@ -84,51 +84,88 @@ async function syncAuctions() {
           auctions = itemsJson.data || itemsJson || [];
           console.log(`✅ Retrieved ${auctions.length} total items from Tiltify.`);
 
-          // In Tiltify v5 API, individual bids are stored at /auction_items/{id}/bids
-          if (auctions.length > 0) {
-            console.log(`📡 Fetching live bids for ${auctions.length} item(s)...`);
-            await Promise.all(auctions.map(async (item) => {
-              try {
-                const bidsUrl1 = `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}/bids`;
-                let bidsRes = await fetch(bidsUrl1, {
-                  headers: {
-                    'Authorization': `Bearer ${access_token}`,
-                    'Accept': 'application/json'
-                  }
-                });
+          // Log raw structure of the target item or first item for debugging
+          const targetItem = auctions.find(i => i.id === '9be4e2b2-1b72-4a7f-9580-8d2e734a4112') || auctions[0];
+          if (targetItem) {
+            console.log('🔍 Sample item keys from collection:', Object.keys(targetItem).join(', '));
+            console.log('🔍 Sample item JSON:', JSON.stringify(targetItem, null, 2));
+          }
 
-                if (!bidsRes.ok) {
-                  const bidsUrl2 = `https://v5api.tiltify.com/api/public/auction_items/${item.id}/bids`;
-                  bidsRes = await fetch(bidsUrl2, {
+          // Probe endpoints to fetch live bids or detailed item info
+          if (auctions.length > 0) {
+            console.log(`📡 Probing live bid details for ${auctions.length} item(s)...`);
+            
+            // Helper to recursively find any bid amounts > 0
+            const extractBidFromObj = (obj) => {
+              if (!obj || typeof obj !== 'object') return 0;
+              let highest = 0;
+              const checkVal = (v) => {
+                if (typeof v === 'number' && v > highest) highest = v;
+                if (typeof v === 'string') {
+                  const n = parseFloat(v);
+                  if (!isNaN(n) && n > highest) highest = n;
+                }
+              };
+
+              // Direct checks
+              checkVal(obj.amount?.value);
+              checkVal(obj.amount);
+              checkVal(obj.value);
+              checkVal(obj.high_bid?.amount?.value);
+              checkVal(obj.high_bid?.value);
+              checkVal(obj.winning_bid?.amount?.value);
+              checkVal(obj.winning_bid?.value);
+              checkVal(obj.winningBid?.amount?.value);
+              checkVal(obj.winningBid?.value);
+
+              // Check arrays (like bids, auction_bids, etc.)
+              for (const key of Object.keys(obj)) {
+                if (Array.isArray(obj[key])) {
+                  for (const elem of obj[key]) {
+                    const sub = extractBidFromObj(elem);
+                    if (sub > highest) highest = sub;
+                  }
+                }
+              }
+              return highest;
+            };
+
+            await Promise.all(auctions.map(async (item) => {
+              const probeUrls = [
+                // 1. Single item detail endpoints
+                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}`,
+                `https://v5api.tiltify.com/api/public/auction_items/${item.id}`,
+                // 2. Dedicated auction bids endpoints
+                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}/auction_bids`,
+                `https://v5api.tiltify.com/api/public/auction_items/${item.id}/auction_bids`,
+                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_bids?auction_item_id=${item.id}`,
+                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}/bids`,
+                `https://v5api.tiltify.com/api/public/auction_items/${item.id}/bids`
+              ];
+
+              for (const url of probeUrls) {
+                try {
+                  const res = await fetch(url, {
                     headers: {
                       'Authorization': `Bearer ${access_token}`,
                       'Accept': 'application/json'
                     }
                   });
-                }
 
-                if (bidsRes.ok) {
-                  const bidsJson = await bidsRes.json();
-                  const bidsList = bidsJson.data || bidsJson || [];
-                  console.log(`   Fetched ${bidsList.length} bid(s) for "${item.name || item.title || item.id}"`);
-
-                  let maxBid = 0;
-                  for (const b of bidsList) {
-                    const val = b.amount?.value ?? b.amount ?? b.value ?? b.bid ?? 0;
-                    const num = typeof val === 'number' ? val : parseFloat(val);
-                    if (!isNaN(num) && num > maxBid) {
-                      maxBid = num;
+                  if (res.ok) {
+                    const json = await res.json();
+                    const data = json.data || json;
+                    const foundBid = extractBidFromObj(data);
+                    
+                    console.log(`   ✅ Succeeded: ${url.replace('https://v5api.tiltify.com', '')} (Found bid: $${foundBid})`);
+                    if (foundBid > 0) {
+                      item.highest_bid_amount = foundBid;
+                      break; // Found the active bid!
                     }
                   }
-
-                  if (maxBid > 0) {
-                    item.highest_bid_amount = maxBid;
-                  }
-                } else {
-                  console.log(`   ℹ️ Bids endpoint returned ${bidsRes.status} for item ${item.id}`);
+                } catch {
+                  // Silently continue to next candidate
                 }
-              } catch (bidErr) {
-                console.warn(`   ⚠️ Error querying bids for item ${item.id}:`, bidErr.message);
               }
             }));
           }
@@ -235,7 +272,14 @@ async function syncAuctions() {
 
   let cardImage = '';
   const bannerCandidates = ['banner.png', 'banner.jpg', 'banner.jpeg'];
-  const foundBanner = bannerCandidates.find(file => fs.existsSync(path.join(publicDir, file)));
+  const foundBanner = bannerCandidates.find(file => {
+    const fullPath = path.join(publicDir, file);
+    try {
+      return fs.existsSync(fullPath) && fs.statSync(fullPath).size > 0;
+    } catch {
+      return false;
+    }
+  });
 
   if (foundBanner) {
     const bannerPath = path.join(publicDir, foundBanner);
