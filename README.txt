@@ -189,5 +189,32 @@ A: In the "Visual Customizer" or "Webhook & Bot Info" tab, customize the
    embed theme color.
 
 ================================================================================
+10. TILTIFY LIVE AUCTION HOUSE & DYNAMIC SHORT.IO LINK SETUP
+================================================================================
+The repository includes an automated GitHub Action (.github/workflows/auction-sync.yml) 
+and script (sync-auction.js) to keep your Short.io dynamic link (0mie4.kids/auctions) 
+synced with live Tiltify auctions:
+
+1. How the Banner Image Works:
+   - Automatic (Zero maintenance): If no banner is uploaded, the script automatically 
+     uses the photo from the auction that currently has the highest bid!
+   - Fixed Campaign Banner: Drop a 1200x630px image named banner.png (or .jpg) 
+     into the public/ folder of your repo. The script will automatically use it 
+     for the social card preview.
+
+2. Short.io & DNS Clean-up (No Cloudflare Worker needed):
+   - In Short.io: Set destination (Original URL) of 0mie4.kids/auctions to your 
+     GitHub Pages URL: https://0mie.github.io/Donify/
+   - In Porkbun (DNS): Remove any leftover worker CNAME records pointing to 
+     auction-card.donify.workers.dev. Keep only Short.io records.
+   - In Cloudflare: You can delete the auction-card worker.
+
+3. GitHub Secrets (Repository Settings -> Secrets and variables -> Actions):
+   - TILTIFY_CLIENT_ID: Your Tiltify App Client ID
+   - TILTIFY_CLIENT_SECRET: Your Tiltify App Client Secret
+   - SHORT_IO_API_KEY: Your Short.io API key (optional for auto-syncing link title)
+   - SHORT_IO_LINK_ID: Your Short.io link ID (optional)
+
+================================================================================
 Enjoy your automated Tiltify donation alerts!
 ================================================================================

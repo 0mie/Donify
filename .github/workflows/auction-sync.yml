@@ -1,4 +1,4 @@
-name: Auto-Sync Tiltify Soonest Auction to Short.io
+name: Auto-Sync Tiltify Live Auctions to Short.io & GitHub Pages
 
 on:
   schedule:
@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
 
       - name: Run Auction Sync Script
         env:
@@ -28,6 +28,8 @@ jobs:
           SHORT_IO_LINK_ID: ${{ secrets.SHORT_IO_LINK_ID }}
           TILTIFY_CLIENT_ID: ${{ secrets.TILTIFY_CLIENT_ID }}
           TILTIFY_CLIENT_SECRET: ${{ secrets.TILTIFY_CLIENT_SECRET }}
+          TILTIFY_AUCTION_HOUSE_ID: ${{ secrets.TILTIFY_AUCTION_HOUSE_ID }}
+          TILTIFY_REDIRECT_URL: ${{ secrets.TILTIFY_REDIRECT_URL }}
         run: node sync-auction.js
 
       - name: Deploy Rich OpenGraph Preview Page
