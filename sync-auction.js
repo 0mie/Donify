@@ -83,6 +83,55 @@ async function syncAuctions() {
           const itemsJson = await itemsRes.json();
           auctions = itemsJson.data || itemsJson || [];
           console.log(`✅ Retrieved ${auctions.length} total items from Tiltify.`);
+
+          // In Tiltify v5 API, individual bids are stored at /auction_items/{id}/bids
+          if (auctions.length > 0) {
+            console.log(`📡 Fetching live bids for ${auctions.length} item(s)...`);
+            await Promise.all(auctions.map(async (item) => {
+              try {
+                const bidsUrl1 = `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}/bids`;
+                let bidsRes = await fetch(bidsUrl1, {
+                  headers: {
+                    'Authorization': `Bearer ${access_token}`,
+                    'Accept': 'application/json'
+                  }
+                });
+
+                if (!bidsRes.ok) {
+                  const bidsUrl2 = `https://v5api.tiltify.com/api/public/auction_items/${item.id}/bids`;
+                  bidsRes = await fetch(bidsUrl2, {
+                    headers: {
+                      'Authorization': `Bearer ${access_token}`,
+                      'Accept': 'application/json'
+                    }
+                  });
+                }
+
+                if (bidsRes.ok) {
+                  const bidsJson = await bidsRes.json();
+                  const bidsList = bidsJson.data || bidsJson || [];
+                  console.log(`   Fetched ${bidsList.length} bid(s) for "${item.name || item.title || item.id}"`);
+
+                  let maxBid = 0;
+                  for (const b of bidsList) {
+                    const val = b.amount?.value ?? b.amount ?? b.value ?? b.bid ?? 0;
+                    const num = typeof val === 'number' ? val : parseFloat(val);
+                    if (!isNaN(num) && num > maxBid) {
+                      maxBid = num;
+                    }
+                  }
+
+                  if (maxBid > 0) {
+                    item.highest_bid_amount = maxBid;
+                  }
+                } else {
+                  console.log(`   ℹ️ Bids endpoint returned ${bidsRes.status} for item ${item.id}`);
+                }
+              } catch (bidErr) {
+                console.warn(`   ⚠️ Error querying bids for item ${item.id}:`, bidErr.message);
+              }
+            }));
+          }
         } else {
           console.warn(`⚠️ Failed to fetch auction items: ${itemsRes.status}`);
         }
@@ -110,7 +159,9 @@ async function syncAuctions() {
     if (!item) return 0;
     
     // Tiltify API v5 stores active high bids in winning_bid or winningBid (amount.value)
+    // or via the item's /bids endpoint (highest_bid_amount)
     const candidates = [
+      item.highest_bid_amount,
       item.winning_bid?.amount?.value,
       item.winning_bid?.value,
       item.winning_bid?.amount,
