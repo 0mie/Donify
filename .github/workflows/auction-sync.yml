@@ -1,6 +1,9 @@
 name: Auto-Sync Tiltify Live Auctions to Short.io & GitHub Pages
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
@@ -30,6 +33,10 @@ jobs:
           TILTIFY_CLIENT_SECRET: ${{ secrets.TILTIFY_CLIENT_SECRET }}
           TILTIFY_AUCTION_HOUSE_ID: ${{ secrets.TILTIFY_AUCTION_HOUSE_ID }}
           TILTIFY_REDIRECT_URL: ${{ secrets.TILTIFY_REDIRECT_URL }}
+          ACTIVE_AUCTION_TITLE: ${{ vars.ACTIVE_AUCTION_TITLE || secrets.ACTIVE_AUCTION_TITLE }}
+          ACTIVE_AUCTION_DESCRIPTION: ${{ vars.ACTIVE_AUCTION_DESCRIPTION || secrets.ACTIVE_AUCTION_DESCRIPTION }}
+          IDLE_AUCTION_TITLE: ${{ vars.IDLE_AUCTION_TITLE || secrets.IDLE_AUCTION_TITLE }}
+          IDLE_AUCTION_DESCRIPTION: ${{ vars.IDLE_AUCTION_DESCRIPTION || secrets.IDLE_AUCTION_DESCRIPTION }}
         run: node sync-auction.js
 
       - name: Deploy Rich OpenGraph Preview Page

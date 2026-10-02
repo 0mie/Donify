@@ -1,7 +1,33 @@
-// sync-auction.js
-// Synchronizes Tiltify live auction house data, updates Short.io links,
-// and generates a rich OpenGraph HTML preview for GitHub Pages (https://0mie.github.io/Donify/)
-// with instant redirect to the Tiltify auctions page.
+// ============================================================================
+// ✏️ USER CUSTOMIZATION SETTINGS - EDIT YOUR FRONT-FACING TEXT HERE!
+// (You can safely edit any of the text inside the quotes below)
+// ============================================================================
+
+const CUSTOM_SETTINGS = {
+  // 1. Description shown when live auctions are running:
+  //    💡 Tip: {topItemName} will automatically be replaced with the top item's name!
+  activeAuctionDescription: "Top item: {topItemName}. Bid now to support the cause!",
+
+  // 2. Fallback description shown if no auctions are currently active:
+  idleAuctionDescription: "Check out our charity auctions supporting a great cause!",
+
+  // 3. Title shown when live auctions are running:
+  //    💡 Tip: {count} is the total number of live auctions, {topBid} is the highest bid!
+  activeAuctionTitle: "⚡ {count} Live Charity Auctions | Top Bid: {topBid}",
+
+  // 4. Fallback title shown if no auctions are currently active:
+  idleAuctionTitle: "Charity Auctions | Live Bidding",
+
+  // 5. The Tiltify auction hub link where humans get redirected:
+  tiltifyAuctionsUrl: "https://tiltify.com/@0mie/auctions/2026-auctions",
+
+  // 6. Your branded link / domain shown on preview cards:
+  shortDomain: "0mie4.kids/auctions",
+};
+
+// ============================================================================
+// ⚙️ AUTOMATIC ENGINE CODE BELOW (You do NOT need to touch anything down here!)
+// ============================================================================
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,13 +46,13 @@ async function syncAuctions() {
     .filter(Boolean);
 
   const auctionHouseId = process.env.TILTIFY_AUCTION_HOUSE_ID || 'fc5ad221-74fc-48c8-975c-c5b1f41aadf7';
-  const redirectUrl = process.env.TILTIFY_REDIRECT_URL || 'https://tiltify.com/@0mie/auctions/2026-auctions';
+  const redirectUrl = process.env.TILTIFY_REDIRECT_URL || CUSTOM_SETTINGS.tiltifyAuctionsUrl;
   const githubPagesUrl = process.env.GITHUB_PAGES_URL || 'https://0mie.github.io/Donify/';
-  const shortDomain = process.env.SHORT_DOMAIN || '0mie4.kids/auctions';
+  const shortDomain = process.env.SHORT_DOMAIN || CUSTOM_SETTINGS.shortDomain;
 
   let auctions = [];
 
-  // 1. Fetch auctions from Tiltify API
+  // 1. Query Tiltify v5 API for live items
   if (clientId && clientSecret) {
     try {
       console.log('🔑 Authenticating with Tiltify v5 API...');
@@ -68,7 +94,7 @@ async function syncAuctions() {
     console.log('ℹ️ TILTIFY_CLIENT_ID / TILTIFY_CLIENT_SECRET not provided in environment; proceeding with fallback data.');
   }
 
-  // Filter only active auctions (not ended or sold)
+  // 2. Filter only active auctions (not ended or sold)
   const now = new Date();
   const activeAuctions = auctions.filter(item => {
     if (item.status && item.status.toLowerCase() !== 'active') return false;
@@ -102,8 +128,8 @@ async function syncAuctions() {
     ? `$${topBidAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` 
     : '$0';
 
-  // Part 1: Check for custom banner (banner.png, banner.jpg, banner.jpeg) in public/
-  // Otherwise fall back to the top item's photo
+  // 3. Banner Image Detection:
+  //    Checks for public/banner.png (or .jpg), otherwise falls back to top item photo
   const publicDir = path.resolve(__dirname, 'public');
   if (!fs.existsSync(publicDir)) {
     fs.mkdirSync(publicDir, { recursive: true });
@@ -114,7 +140,10 @@ async function syncAuctions() {
   const foundBanner = bannerCandidates.find(file => fs.existsSync(path.join(publicDir, file)));
 
   if (foundBanner) {
-    cardImage = `https://0mie.github.io/Donify/${foundBanner}`;
+    const bannerPath = path.join(publicDir, foundBanner);
+    const stats = fs.statSync(bannerPath);
+    const version = Math.floor(stats.mtimeMs || Date.now());
+    cardImage = `https://0mie.github.io/Donify/${foundBanner}?v=${version}`;
     console.log(`🖼️ Using custom campaign banner: ${cardImage}`);
   } else if (topItem) {
     const itemImage = topItem.image?.src || topItem.image_url || topItem.image?.url;
@@ -128,48 +157,79 @@ async function syncAuctions() {
     cardImage = 'https://0mie.github.io/Donify/tiltify-icon.jpg';
   }
 
-  // Titles and Descriptions
-  const title = activeCount > 0 
-    ? `⚡ ${activeCount} Live Charity Auctions | Top Bid: ${topItemBid}`
-    : 'Charity Auctions | Live Bidding';
+  // 4. Build Title and Description using user CUSTOM_SETTINGS
+  let title = '';
+  let description = '';
 
-  const description = activeCount > 0
-    ? `Top item: ${topItemName}. Bid now to support the cause!`
-    : 'Check out our charity auctions supporting a great cause!';
+  if (activeCount > 0) {
+    title = (process.env.ACTIVE_AUCTION_TITLE || CUSTOM_SETTINGS.activeAuctionTitle)
+      .replace('{count}', activeCount)
+      .replace('{topBid}', topItemBid);
+
+    description = (process.env.ACTIVE_AUCTION_DESCRIPTION || CUSTOM_SETTINGS.activeAuctionDescription)
+      .replace('{topItemName}', topItemName)
+      .replace('{count}', activeCount)
+      .replace('{topBid}', topItemBid);
+  } else {
+    title = process.env.IDLE_AUCTION_TITLE || CUSTOM_SETTINGS.idleAuctionTitle;
+    description = process.env.IDLE_AUCTION_DESCRIPTION || CUSTOM_SETTINGS.idleAuctionDescription;
+  }
 
   console.log(`🎯 Title: ${title}`);
   console.log(`📝 Description: ${description}`);
   console.log(`🔗 Human Redirect: ${redirectUrl}`);
   console.log(`🌐 Short.io Destination URL: ${githubPagesUrl}`);
 
-  // Part 2: Update Short.io destination directly to GitHub Pages (no Cloudflare worker required)
-  if (shortIoKey && shortIoLinkIds.length > 0) {
-    console.log(`🔄 Updating ${shortIoLinkIds.length} Short.io link(s)...`);
-    for (const linkId of shortIoLinkIds) {
+  // 5. Update Short.io destination directly to GitHub Pages (no Cloudflare worker required)
+  if (shortIoKey) {
+    // Auto-discover link IDs for both 0mie4.kids (number 0) and omie4.kids (letter O)
+    const candidateDomains = ['0mie4.kids', 'omie4.kids'];
+    for (const domain of candidateDomains) {
       try {
-        const shortRes = await fetch(`https://api.short.io/links/${linkId}`, {
-          method: 'POST',
-          headers: {
-            'authorization': shortIoKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            originalURL: githubPagesUrl,
-            title: title
-          })
+        const expandRes = await fetch(`https://api.short.io/links/expand?domain=${encodeURIComponent(domain)}&path=auctions`, {
+          headers: { 'authorization': shortIoKey, 'Accept': 'application/json' }
         });
-        if (shortRes.ok) {
-          console.log(`✅ Successfully updated Short.io link (${linkId}) -> ${githubPagesUrl}`);
-        } else {
-          console.warn(`⚠️ Short.io update failed for (${linkId}): status ${shortRes.status}`);
+        if (expandRes.ok) {
+          const expandData = await expandRes.json();
+          const foundId = expandData.idString || expandData.id;
+          if (foundId && !shortIoLinkIds.includes(String(foundId))) {
+            console.log(`🔍 Auto-discovered Short.io link for ${domain}/auctions (ID: ${foundId})`);
+            shortIoLinkIds.push(String(foundId));
+          }
         }
-      } catch (shortErr) {
-        console.warn(`⚠️ Short.io network error for link ${linkId}:`, shortErr.message);
+      } catch (autoErr) {
+        // Fallback silently to explicit SHORT_IO_LINK_ID
+      }
+    }
+
+    if (shortIoLinkIds.length > 0) {
+      console.log(`🔄 Updating ${shortIoLinkIds.length} Short.io link(s)...`);
+      for (const linkId of shortIoLinkIds) {
+        try {
+          const shortRes = await fetch(`https://api.short.io/links/${linkId}`, {
+            method: 'POST',
+            headers: {
+              'authorization': shortIoKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              originalURL: githubPagesUrl,
+              title: title
+            })
+          });
+          if (shortRes.ok) {
+            console.log(`✅ Successfully updated Short.io link (${linkId}) -> ${githubPagesUrl}`);
+          } else {
+            console.warn(`⚠️ Short.io update failed for (${linkId}): status ${shortRes.status}`);
+          }
+        } catch (shortErr) {
+          console.warn(`⚠️ Short.io network error for link ${linkId}:`, shortErr.message);
+        }
       }
     }
   }
 
-  // Part 3: Generate Rich HTML Meta Page with 0mie4.kids OpenGraph & instant human redirect
+  // 6. Generate Rich HTML Meta Page with 0mie4.kids OpenGraph & instant human redirect
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
