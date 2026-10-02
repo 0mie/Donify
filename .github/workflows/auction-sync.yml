@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +37,7 @@ jobs:
           ACTIVE_AUCTION_DESCRIPTION: ${{ vars.ACTIVE_AUCTION_DESCRIPTION || secrets.ACTIVE_AUCTION_DESCRIPTION }}
           IDLE_AUCTION_TITLE: ${{ vars.IDLE_AUCTION_TITLE || secrets.IDLE_AUCTION_TITLE }}
           IDLE_AUCTION_DESCRIPTION: ${{ vars.IDLE_AUCTION_DESCRIPTION || secrets.IDLE_AUCTION_DESCRIPTION }}
+          PREFER_ITEM_IMAGE: ${{ vars.PREFER_ITEM_IMAGE || secrets.PREFER_ITEM_IMAGE }}
         run: node sync-auction.js
 
       - name: Deploy Rich OpenGraph Preview Page

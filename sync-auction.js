@@ -23,6 +23,13 @@ const CUSTOM_SETTINGS = {
 
   // 6. Your branded link / domain shown on preview cards:
   shortDomain: "0mie4.kids/auctions",
+
+  // 7. Social Card Image Mode:
+  //    false (Recommended for 1200x630 clarity): Always uses your high-res banner.png!
+  //          Prevents square 800x800 Tiltify photos from being cropped on Twitter/Discord.
+  //    true: Automatically switches card image to whichever item has the #1 bid.
+  //          (Checks public/ for custom files like mewtwo.png first, then Tiltify photo).
+  preferItemImage: false,
 };
 
 // ============================================================================
@@ -91,81 +98,45 @@ async function syncAuctions() {
             console.log('🔍 Sample item JSON:', JSON.stringify(targetItem, null, 2));
           }
 
-          // Probe endpoints to fetch live bids or detailed item info
+          // 2. Fetch live bids for each auction item from Tiltify OpenAPI endpoint:
+          //    GET /api/public/auction_houses/{auction_house_id}/auction_items/{auction_item_id}/auction_bids
           if (auctions.length > 0) {
-            console.log(`📡 Probing live bid details for ${auctions.length} item(s)...`);
-            
-            // Helper to recursively find any bid amounts > 0
-            const extractBidFromObj = (obj) => {
-              if (!obj || typeof obj !== 'object') return 0;
-              let highest = 0;
-              const checkVal = (v) => {
-                if (typeof v === 'number' && v > highest) highest = v;
-                if (typeof v === 'string') {
-                  const n = parseFloat(v);
-                  if (!isNaN(n) && n > highest) highest = n;
-                }
-              };
-
-              // Direct checks
-              checkVal(obj.amount?.value);
-              checkVal(obj.amount);
-              checkVal(obj.value);
-              checkVal(obj.high_bid?.amount?.value);
-              checkVal(obj.high_bid?.value);
-              checkVal(obj.winning_bid?.amount?.value);
-              checkVal(obj.winning_bid?.value);
-              checkVal(obj.winningBid?.amount?.value);
-              checkVal(obj.winningBid?.value);
-
-              // Check arrays (like bids, auction_bids, etc.)
-              for (const key of Object.keys(obj)) {
-                if (Array.isArray(obj[key])) {
-                  for (const elem of obj[key]) {
-                    const sub = extractBidFromObj(elem);
-                    if (sub > highest) highest = sub;
-                  }
-                }
-              }
-              return highest;
-            };
+            console.log(`📡 Fetching live bids for ${auctions.length} item(s)...`);
 
             await Promise.all(auctions.map(async (item) => {
-              const probeUrls = [
-                // 1. Single item detail endpoints
-                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}`,
-                `https://v5api.tiltify.com/api/public/auction_items/${item.id}`,
-                // 2. Dedicated auction bids endpoints
-                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}/auction_bids`,
-                `https://v5api.tiltify.com/api/public/auction_items/${item.id}/auction_bids`,
-                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_bids?auction_item_id=${item.id}`,
-                `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}/bids`,
-                `https://v5api.tiltify.com/api/public/auction_items/${item.id}/bids`
-              ];
+              const bidsUrl = `https://v5api.tiltify.com/api/public/auction_houses/${auctionHouseId}/auction_items/${item.id}/auction_bids`;
+              try {
+                const bidsRes = await fetch(bidsUrl, {
+                  headers: {
+                    'Authorization': `Bearer ${access_token}`,
+                    'Accept': 'application/json'
+                  }
+                });
 
-              for (const url of probeUrls) {
-                try {
-                  const res = await fetch(url, {
-                    headers: {
-                      'Authorization': `Bearer ${access_token}`,
-                      'Accept': 'application/json'
-                    }
-                  });
+                if (bidsRes.ok) {
+                  const bidsJson = await bidsRes.json();
+                  const bidsList = bidsJson.data || [];
+                  console.log(`   Item "${item.name || item.id}": ${bidsList.length} bid(s) recorded.`);
 
-                  if (res.ok) {
-                    const json = await res.json();
-                    const data = json.data || json;
-                    const foundBid = extractBidFromObj(data);
-                    
-                    console.log(`   ✅ Succeeded: ${url.replace('https://v5api.tiltify.com', '')} (Found bid: $${foundBid})`);
-                    if (foundBid > 0) {
-                      item.highest_bid_amount = foundBid;
-                      break; // Found the active bid!
+                  // Scan all placed bids to find the top bid amount
+                  let highestBid = 0;
+                  for (const b of bidsList) {
+                    const rawVal = b.amount?.value ?? b.amount ?? b.value ?? 0;
+                    const val = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal);
+                    if (!isNaN(val) && val > highestBid) {
+                      highestBid = val;
                     }
                   }
-                } catch {
-                  // Silently continue to next candidate
+
+                  if (highestBid > 0) {
+                    item.highest_bid_amount = highestBid;
+                    console.log(`   🔥 Item "${item.name}": Top bid is $${highestBid.toFixed(2)}`);
+                  }
+                } else {
+                  console.warn(`   ⚠️ Bids endpoint returned status ${bidsRes.status} for item ${item.id}`);
                 }
+              } catch (bidErr) {
+                console.warn(`   ⚠️ Error querying bids for item ${item.id}:`, bidErr.message);
               }
             }));
           }
@@ -263,35 +234,122 @@ async function syncAuctions() {
   const topBidAmount = parseBidAmount(topItem);
   const topItemBid = formatMoney(topBidAmount);
 
-  // 3. Banner Image Detection:
-  //    Checks for public/banner.png (or .jpg), otherwise falls back to top item photo
+  // 3. Dynamic Card Image Detection (Supports automatic bidding war item photo switching):
   const publicDir = path.resolve(__dirname, 'public');
   if (!fs.existsSync(publicDir)) {
     fs.mkdirSync(publicDir, { recursive: true });
   }
 
-  let cardImage = '';
-  const bannerCandidates = ['banner.png', 'banner.jpg', 'banner.jpeg'];
-  const foundBanner = bannerCandidates.find(file => {
-    const fullPath = path.join(publicDir, file);
-    try {
-      return fs.existsSync(fullPath) && fs.statSync(fullPath).size > 0;
-    } catch {
-      return false;
-    }
-  });
+  // Check if preferItemImage is enabled (from environment variable or CUSTOM_SETTINGS)
+  const shouldPreferItemImage = process.env.PREFER_ITEM_IMAGE !== undefined
+    ? process.env.PREFER_ITEM_IMAGE === 'true'
+    : (CUSTOM_SETTINGS.preferItemImage ?? true);
 
-  if (foundBanner) {
-    const bannerPath = path.join(publicDir, foundBanner);
-    const stats = fs.statSync(bannerPath);
-    const version = Math.floor(stats.mtimeMs || Date.now());
-    cardImage = `https://0mie.github.io/Donify/${foundBanner}?v=${version}`;
-    console.log(`🖼️ Using custom campaign banner: ${cardImage}`);
-  } else if (topItem) {
-    const itemImage = topItem.image?.src || topItem.image_url || topItem.image?.url;
-    if (itemImage) {
-      cardImage = itemImage;
-      console.log(`🖼️ Using top auction item photo: ${cardImage}`);
+  let cardImage = '';
+
+  // Helper to find general banner image in public/
+  const findGeneralBanner = () => {
+    const bannerCandidates = ['banner.png', 'banner.jpg', 'banner.jpeg', 'banner.webp'];
+    for (const file of bannerCandidates) {
+      const fullPath = path.join(publicDir, file);
+      try {
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).size > 0) {
+          const stats = fs.statSync(fullPath);
+          const version = Math.floor(stats.mtimeMs || Date.now());
+          return `https://0mie.github.io/Donify/${file}?v=${version}`;
+        }
+      } catch {
+        // continue
+      }
+    }
+    return null;
+  };
+
+  // Helper to find an item-specific uploaded file in public/
+  // Matches: <item_id>.png, <slug>.png, or keyword matches (e.g. mewtwo.png)
+  const findItemUploadedImage = (item) => {
+    if (!item) return null;
+    const itemId = (item.id || '').toLowerCase();
+    const itemName = (item.name || item.title || '').toLowerCase();
+    const cleanItemSlug = itemName.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    try {
+      const allFiles = fs.readdirSync(publicDir);
+      const imageFiles = allFiles.filter(f => {
+        const lower = f.toLowerCase();
+        return (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.webp')) &&
+               !lower.startsWith('banner') &&
+               !lower.startsWith('tiltify-icon');
+      });
+
+      for (const file of imageFiles) {
+        const baseName = path.parse(file).name.toLowerCase();
+        
+        // 1. Exact item ID match (e.g. 9be4e2b2-1b72-4a7f-9580-8d2e734a4112.png)
+        if (itemId && baseName === itemId) {
+          const stats = fs.statSync(path.join(publicDir, file));
+          return `https://0mie.github.io/Donify/${file}?v=${Math.floor(stats.mtimeMs || Date.now())}`;
+        }
+
+        // 2. Exact slug match (e.g. 30th-celebration-mewtwo-63-128-promo-card.png)
+        if (cleanItemSlug && baseName === cleanItemSlug) {
+          const stats = fs.statSync(path.join(publicDir, file));
+          return `https://0mie.github.io/Donify/${file}?v=${Math.floor(stats.mtimeMs || Date.now())}`;
+        }
+
+        // 3. Keyword / partial match (e.g. mewtwo.png matches "30th Celebration Mewtwo ...")
+        if (baseName.length >= 3 && itemName.includes(baseName)) {
+          const stats = fs.statSync(path.join(publicDir, file));
+          return `https://0mie.github.io/Donify/${file}?v=${Math.floor(stats.mtimeMs || Date.now())}`;
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Error scanning public/ directory for item images:', err.message);
+    }
+    return null;
+  };
+
+  // Helper to extract official image URL provided by Tiltify
+  const getTiltifyItemImage = (item) => {
+    if (!item) return null;
+    if (typeof item.image === 'string') return item.image;
+    if (item.image?.src) return item.image.src;
+    if (item.image?.url) return item.image.url;
+    if (item.image_url) return item.image_url;
+    if (Array.isArray(item.images) && item.images.length > 0) {
+      const first = item.images[0];
+      return first.image?.src || first.image?.url || first.src || first.url || (typeof first === 'string' ? first : null);
+    }
+    return null;
+  };
+
+  if (activeCount > 0 && topItem && shouldPreferItemImage) {
+    // 1. Check if user uploaded a specific image to public/ for this top item
+    const localItemImage = findItemUploadedImage(topItem);
+    if (localItemImage) {
+      cardImage = localItemImage;
+      console.log(`🖼️ Auto-selected custom item image from public/ for "${topItem.name}": ${cardImage}`);
+    } else {
+      // 2. Use Tiltify's official image for this top item
+      const tiltifyImg = getTiltifyItemImage(topItem);
+      if (tiltifyImg) {
+        cardImage = tiltifyImg;
+        console.log(`🖼️ Auto-selected Tiltify item photo for top bid "${topItem.name}": ${cardImage}`);
+      } else {
+        // 3. Fall back to campaign banner if top item has no image
+        const generalBanner = findGeneralBanner();
+        if (generalBanner) {
+          cardImage = generalBanner;
+          console.log(`🖼️ Using custom campaign banner as fallback: ${cardImage}`);
+        }
+      }
+    }
+  } else {
+    // Idle mode or preferItemImage: false -> Use campaign banner
+    const generalBanner = findGeneralBanner();
+    if (generalBanner) {
+      cardImage = generalBanner;
+      console.log(`🖼️ Using campaign banner: ${cardImage}`);
     }
   }
 

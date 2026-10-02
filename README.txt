@@ -128,19 +128,33 @@ To prevent Discord, Twitter/X, and Facebook from cutting off your text with "...
   - Example: "⚡ 4 Live Charity Auctions | Top Bid: $2.50" (~42 chars, fits all phones).
 
 --------------------------------------------------------------------------------
-5. CUSTOM CAMPAIGN BANNER IMAGES & AUTOMATIC CACHE-BUSTING
+5. DYNAMIC BIDDING WAR IMAGE SWITCHING & CUSTOM BANNERS
 --------------------------------------------------------------------------------
-You can upload a custom banner image for your social share cards:
+When multiple items are listed in an auction, the preview image automatically 
+updates to show whichever item currently holds the #1 highest bid!
 
-1. Upload your image directly to the "public/" folder on GitHub:
-   https://github.com/0mie/Donify/tree/main/public
-2. Name the file: banner.png (or banner.jpg)
-3. Recommended dimensions: 1200 x 630 pixels.
+HOW IT WORKS:
+1. AUTOMATIC TILTIFY PHOTOS (Zero Effort):
+   You don't even need to upload extra files. The script automatically pulls the 
+   official high-res photo from Tiltify for whichever item is currently in the lead!
+   If Item A is overtaken by Item B in a bidding war, the card photo automatically 
+   switches to Item B on the next sync.
+
+2. OPTIONAL CUSTOM HIGH-RES UPLOADS (public/ folder):
+   If you want to use custom photos or graphic overlays for individual items, drop 
+   them into the public/ directory. The script matches them automatically by:
+   - Keyword: e.g. mewtwo.png matches "30th Celebration Mewtwo 63/128..."
+   - Item ID: e.g. 9be4e2b2-1b72-4a7f-9580-8d2e734a4112.png
+   - Slug: e.g. 30th-celebration-mewtwo-63-128-promo-card.png
+
+3. IDLE / CAMPAIGN BANNER (public/banner.png):
+   When all auctions end, or when no auctions are currently running, the card 
+   automatically switches to your general public/banner.png (or banner.jpg).
 
 ⚡ AUTOMATIC CACHE-BUSTING:
 Twitter normally caches image URLs for up to 7 days. Our script automatically 
 appends a version timestamp (?v=1727856000) based on your file's upload time. 
-Whenever you upload a new banner.png, Twitter and Discord detect the new URL 
+Whenever you upload a new image, Twitter and Discord detect the new URL 
 and refresh the image immediately!
 
 💡 PRO-TIP FOR TWITTER:
