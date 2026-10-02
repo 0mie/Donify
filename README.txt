@@ -1,220 +1,287 @@
 ================================================================================
-           TILTIFY TO DISCORD DONATION BOT - BEGINNER SETUP GUIDE
+           DONIFY: TILTIFY DISCORD BOT & LIVE AUCTION HUB SETUP GUIDE
 ================================================================================
 
-Welcome! This bot automatically sends real-time donation alerts and auction 
-house notifications from your Tiltify charity campaigns straight into your 
-Discord server with rich, customized embed cards.
+Welcome to Donify! This all-in-one suite does two powerful things for your 
+charity campaigns:
 
-You do NOT need any coding experience to set this up. Follow the simple steps 
-below.
+1. 📢 TILTIFY TO DISCORD DONATION BOT:
+   Automatically sends instant real-time donation alerts, donor messages, and 
+   reward fulfillment notifications into your Discord server with rich embeds.
+
+2. ⚡ DYNAMIC LIVE AUCTION HUB & SHORT.IO INTEGRATION:
+   Automatically syncs your live Tiltify auction items every 10 minutes, detects 
+   the highest live bids, updates your branded short links (0mie4.kids/auctions 
+   & omie4.kids/auctions), and generates high-impact social preview cards for 
+   Twitter/X, Discord, Facebook, and iMessage.
+
+You do NOT need programming experience to use this. Everything is designed to 
+be managed directly from GitHub and simple web dashboards.
 
 ================================================================================
 TABLE OF CONTENTS
 ================================================================================
-1. What You Need Before You Begin
-2. Step 1: Create a Discord Webhook (Takes 1 Minute)
-3. Step 2: Deploy to Render for Free
-4. Step 3: Configure Environment Secrets in Render (CRITICAL FOR PUBLIC REPOS)
-5. Step 4: Protect Your Bot with an Admin Passcode
-6. Step 5: Connect Tiltify (Instant Webhook)
-7. Step 6: Keep Your Bot Awake 24/7 (Free Ping Setup)
-8. Step 7: Test Your Alerts
-9. Troubleshooting & FAQ
+PART I: DYNAMIC LIVE AUCTION HUB & SHORT.IO (0mie4.kids/auctions)
+  1. How the Live Auction Sync Works
+  2. Editing Titles & Descriptions Without Touching Code (GitHub Variables)
+  3. Editing Titles & Descriptions in Code (sync-auction.js Lines 1-25)
+  4. Character Count Guidelines (Avoid Social Truncation)
+  5. Custom Campaign Banner Images & Automatic Cache-Busting
+  6. Required GitHub Secrets & Setup (Step-by-Step)
+  7. Handling Dual Domains (0mie4.kids vs omie4.kids)
+
+PART II: DISCORD DONATION ALERT BOT (Render 24/7 Hosting)
+  8. Step 1: Create a Discord Webhook
+  9. Step 2: Deploy to Render for Free
+ 10. Step 3: Configure Environment Secrets in Render
+ 11. Step 4: Admin Passcode Protection
+ 12. Step 5: Connect Tiltify Webhooks
+ 13. Step 6: Keep Your Bot Awake 24/7 (Free Ping)
+ 14. Step 7: Testing Your Alerts & Troubleshooting FAQ
 
 ================================================================================
-1. WHAT YOU NEED BEFORE YOU BEGIN
+PART I: DYNAMIC LIVE AUCTION HUB & SHORT.IO (0mie4.kids/auctions)
 ================================================================================
-* A Discord account and a Discord server where you have "Manage Webhooks" 
-  permission (or Server Owner/Admin).
-* A Tiltify account with an active campaign or charity stream.
-* A free Render account (https://render.com) to host the bot online 24/7.
-* A free GitHub account (https://github.com) to connect to Render.
-* A free cron-job.org account (https://cron-job.org) to keep Render awake.
+
+--------------------------------------------------------------------------------
+1. HOW THE LIVE AUCTION SYNC WORKS
+--------------------------------------------------------------------------------
+Every 10 minutes (and every time you push code or run it manually), a background 
+GitHub Action (.github/workflows/auction-sync.yml) runs:
+
+1. Fetches all live items from your Tiltify Auction House (v5 API).
+2. Reads the active winning bids (e.g. $2.50, $10, $250).
+3. If auctions are active:
+   - Sets the social share title and description featuring your top item & bid.
+   - Uses your custom banner image (or falls back to the top item's photo).
+4. If no auctions are active:
+   - Switches automatically to your custom idle title and description.
+5. Updates Short.io link titles and destinations via API.
+6. Deploys the rich OpenGraph preview page to GitHub Pages (0mie.github.io/Donify).
+7. When humans click the link, they are instantly redirected to your live 
+   Tiltify auction hub!
+
+--------------------------------------------------------------------------------
+2. EDITING TITLES & DESCRIPTIONS WITHOUT TOUCHING CODE (GITHUB VARIABLES)
+--------------------------------------------------------------------------------
+You can change your front-facing descriptions and titles at any time without 
+editing a single line of code!
+
+1. In GitHub, go to: Settings -> Secrets and variables -> Actions
+2. Click the "Variables" tab (next to Secrets).
+3. Click "New repository variable".
+4. Add any of the following variables:
+
+   VARIABLE NAME               DESCRIPTION & EXAMPLE
+   -----------------------------------------------------------------------------
+   ACTIVE_AUCTION_TITLE        Title when live auctions are running.
+                               Example: ⚡ {count} Live Charity Auctions | Top Bid: {topBid}
+
+   ACTIVE_AUCTION_DESCRIPTION  Card description when auctions are running.
+                               Example: Top item: {topItemName}. Bid now to support the cause!
+
+   IDLE_AUCTION_TITLE          Title when no auctions are currently active.
+                               Example: Charity Auctions | Live Bidding
+
+   IDLE_AUCTION_DESCRIPTION    Card description when no auctions are running.
+                               Example: Check out our charity auctions supporting a great cause!
+
+   TILTIFY_REDIRECT_URL        Where humans get sent when they click your link.
+                               Example: https://tiltify.com/@0mie/auctions/2026-auctions
+
+💡 SMART TAGS:
+- {topItemName}  Automatically replaced with the name of the highest-bid item.
+- {topBid}       Automatically replaced with the highest bid amount (e.g. $2.50).
+- {count}        Automatically replaced with total count of active items.
+
+--------------------------------------------------------------------------------
+3. EDITING TITLES & DESCRIPTIONS IN CODE (sync-auction.js LINES 1-25)
+--------------------------------------------------------------------------------
+If you prefer editing the code directly, open "sync-auction.js" in your repo.
+Lines 1 to 25 are formatted in a clean, highlighted box at the very top:
+
+   const CUSTOM_SETTINGS = {
+     activeAuctionDescription: "Top item: {topItemName}. Bid now to support the cause!",
+     idleAuctionDescription: "Check out our charity auctions supporting a great cause!",
+     activeAuctionTitle: "⚡ {count} Live Charity Auctions | Top Bid: {topBid}",
+     idleAuctionTitle: "Charity Auctions | Live Bidding",
+     tiltifyAuctionsUrl: "https://tiltify.com/@0mie/auctions/2026-auctions",
+     shortDomain: "0mie4.kids/auctions",
+   };
+
+You can safely change any text inside the quotation marks. Everything below 
+Line 25 is automatic engine code that you never need to touch.
+
+--------------------------------------------------------------------------------
+4. CHARACTER COUNT GUIDELINES (AVOID SOCIAL TRUNCATION)
+--------------------------------------------------------------------------------
+To prevent Discord, Twitter/X, and Facebook from cutting off your text with "...":
+
+* DESCRIPTION:
+  - Sweet spot: 100 to 150 characters (including spaces).
+  - Maximum safe limit: 160 characters.
+  - If using {topItemName}, leave ~25 characters of room for the item title.
+
+* TITLE:
+  - Sweet spot: 40 to 60 characters.
+  - Maximum safe limit: 70 characters.
+  - Example: "⚡ 4 Live Charity Auctions | Top Bid: $2.50" (~42 chars, fits all phones).
+
+--------------------------------------------------------------------------------
+5. CUSTOM CAMPAIGN BANNER IMAGES & AUTOMATIC CACHE-BUSTING
+--------------------------------------------------------------------------------
+You can upload a custom banner image for your social share cards:
+
+1. Upload your image directly to the "public/" folder on GitHub:
+   https://github.com/0mie/Donify/tree/main/public
+2. Name the file: banner.png (or banner.jpg)
+3. Recommended dimensions: 1200 x 630 pixels.
+
+⚡ AUTOMATIC CACHE-BUSTING:
+Twitter normally caches image URLs for up to 7 days. Our script automatically 
+appends a version timestamp (?v=1727856000) based on your file's upload time. 
+Whenever you upload a new banner.png, Twitter and Discord detect the new URL 
+and refresh the image immediately!
+
+💡 PRO-TIP FOR TWITTER:
+If you post on Twitter right after an update and Twitter shows an old preview, 
+add a dummy query param to your tweet link (e.g. 0mie4.kids/auctions?1). This 
+forces Twitter's scraper to crawl a fresh card on the spot.
+
+--------------------------------------------------------------------------------
+6. REQUIRED GITHUB SECRETS & SETUP (STEP-BY-STEP)
+--------------------------------------------------------------------------------
+To enable the 10-minute auto-sync:
+
+1. In GitHub: Settings -> Secrets and variables -> Actions -> Secrets tab.
+2. Ensure you have the following secrets added:
+
+   SECRET NAME               WHERE TO GET IT
+   -----------------------------------------------------------------------------
+   TILTIFY_CLIENT_ID         Tiltify User Dashboard -> My Applications
+   TILTIFY_CLIENT_SECRET     Tiltify User Dashboard -> My Applications
+   TILTIFY_AUCTION_HOUSE_ID  Your Auction House ID (e.g. fc5ad221-74fc-...)
+   SHORT_IO_API_KEY          Short.io -> Integrations & API -> API Key
+   SHORT_IO_LINK_ID          Short.io -> Link Details -> Link ID
+
+3. Enable GitHub Pages:
+   - Go to: Settings -> Pages.
+   - Under "Build and deployment", set Source to: "Deploy from a branch".
+   - Branch: gh-pages, Folder: / (root).
+   - Click Save. (The GitHub Action automatically deploys to gh-pages).
+
+--------------------------------------------------------------------------------
+7. HANDLING DUAL DOMAINS (0mie4.kids vs omie4.kids)
+--------------------------------------------------------------------------------
+Notice the two domains:
+- 0mie4.kids (starts with digit zero '0')
+- omie4.kids (starts with letter 'o')
+
+Short.io treats these as two separate domains with two separate Link IDs.
+Our script handles this automatically:
+1. AUTO-DISCOVERY: The script queries Short.io for both domains and auto-syncs 
+   both links in a single pass.
+2. COMMA-SEPARATED IDS: You can also specify both link IDs in SHORT_IO_LINK_ID:
+   SHORT_IO_LINK_ID: id_for_0mie, id_for_omie
+
 
 ================================================================================
-2. STEP 1: CREATE A DISCORD WEBHOOK (Takes 1 Minute)
+PART II: DISCORD DONATION ALERT BOT (Render 24/7 Hosting)
 ================================================================================
-A webhook is a secure link that allows this bot to post messages in your Discord channel.
 
-1. Open Discord on your desktop or browser.
-2. Go to the server and the channel where you want donation alerts to appear.
+--------------------------------------------------------------------------------
+8. STEP 1: CREATE A DISCORD WEBHOOK
+--------------------------------------------------------------------------------
+1. Open Discord on desktop or browser.
+2. Go to the channel where you want donation alerts to appear.
 3. Click the Gear icon (Edit Channel) next to the channel name.
-4. Click "Integrations" on the left menu.
-5. Click "Webhooks", then click "New Webhook" (or "Create Webhook").
-6. Give it a name (for example: "Tiltify Alerts").
-7. Click "Copy Webhook URL".
-8. Keep this URL handy — you will paste it into your Render Environment variables!
-   (It looks like: https://discord.com/api/webhooks/123456789/abcdefgh...)
+4. Click "Integrations" -> "Webhooks" -> "New Webhook".
+5. Name it (e.g. "Donify Alerts").
+6. Click "Copy Webhook URL".
+   (Looks like: https://discord.com/api/webhooks/123456789/abcdefgh...)
 
-================================================================================
-3. STEP 2: DEPLOY TO RENDER FOR FREE
-================================================================================
-1. Fork or push this repository to your GitHub account.
-2. Go to https://dashboard.render.com and sign in.
-3. Click the "+ New" button at the top, then choose "Web Service".
-4. Select "Build and deploy from a Git repository" and choose your repository.
-5. Fill in the basic settings:
-   - Name: Choose a name for your bot (e.g. "my-tiltify-bot")
+--------------------------------------------------------------------------------
+9. STEP 2: DEPLOY TO RENDER FOR FREE
+--------------------------------------------------------------------------------
+1. Go to https://dashboard.render.com and sign in.
+2. Click "+ New" -> "Web Service".
+3. Connect your GitHub repository (Donify).
+4. Fill in:
+   - Name: donify-bot
    - Language: Node
-   - Branch: main (or master)
-   - Region: Any region close to you
+   - Branch: main
    - Build Command: npm install && npm run build
    - Start Command: npm start
    - Instance Type: Free ($0/month)
-6. DO NOT click "Deploy" yet — proceed to Step 3 below to add your secrets!
+5. Do NOT click Deploy yet — proceed to Step 10 to add your environment variables!
 
-================================================================================
-4. STEP 3: CONFIGURE ENVIRONMENT SECRETS IN RENDER (CRITICAL FOR PUBLIC REPOS)
-================================================================================
-To keep your Discord webhook, bot tokens, and Tiltify secrets 100% private and 
-never exposed in your public GitHub repository:
+--------------------------------------------------------------------------------
+10. STEP 3: CONFIGURE ENVIRONMENT SECRETS IN RENDER
+--------------------------------------------------------------------------------
+In your Render Web Service settings, add these Environment Variables:
 
-1. In your Render Web Service settings, scroll down to the "Environment Variables" section
-   (or click "Environment" in the left sidebar after creating the service).
-2. Add the following environment variables:
-
-   KEY:                      VALUE:
+   KEY                       VALUE
    -----------------------------------------------------------------------------
-   DISCORD_WEBHOOK_URL       https://discord.com/api/webhooks/1234... (your webhook)
-   ADMIN_PASSWORD            YourSecretPasscode123 (locks dashboard settings)
-   TILTIFY_CAMPAIGN_ID       Your Tiltify Campaign ID (optional if using webhook)
+   DISCORD_WEBHOOK_URL       https://discord.com/api/webhooks/1234... (from Step 8)
+   ADMIN_PASSWORD            YourSecretPassword (locks web dashboard)
+   TILTIFY_CAMPAIGN_ID       Your Tiltify Campaign ID
 
-3. (Optional for Bot Mode only):
-   If you use a Discord Bot Application instead of a Webhook:
-   DISCORD_BOT_TOKEN         Your Discord Bot Token from developer portal
-   DISCORD_CHANNEL_ID        Your Discord Channel ID (numeric)
+Click "Save Changes" / "Create Web Service". Render will securely deploy.
 
-4. (Optional for Tiltify API Polling):
-   TILTIFY_CLIENT_ID         Your Tiltify App Client ID
-   TILTIFY_CLIENT_SECRET     Your Tiltify App Client Secret
+--------------------------------------------------------------------------------
+11. STEP 4: ADMIN PASSCODE PROTECTION
+--------------------------------------------------------------------------------
+Setting ADMIN_PASSWORD locks your web dashboard settings from unauthorized 
+visitors. Visitors see a clean lock screen. Tiltify webhooks and status endpoints 
+remain completely functional in the background.
 
-5. Click "Save Changes" (or "Create Web Service").
-Render will securely encrypt these values. They will NEVER be visible in your GitHub 
-repository, code files, or public web pages!
-
-================================================================================
-5. STEP 4: PROTECT YOUR BOT WITH AN ADMIN PASSCODE
-================================================================================
-If you set the ADMIN_PASSWORD environment variable in Step 3, your bot is already 
-fully locked!
-
-To change or set your passcode from the web dashboard:
-1. Open your Render bot URL in your browser.
-2. Click the amber "Set Passcode" button in the top navigation bar.
-3. Type a passcode (4+ characters or a PIN) and click "Set Passcode & Lock".
-4. Your browser will remember you, while other visitors will see a clean lock screen.
-
-================================================================================
-6. STEP 5: CONNECT TILTIFY (INSTANT WEBHOOK)
-================================================================================
-Tiltify can notify your bot the exact second someone donates!
-
-1. Open your bot dashboard URL in your browser.
-2. Go to the "Tiltify Settings" tab.
-3. Enter your Tiltify Campaign ID or public slug.
-4. Copy your Webhook Endpoint URL shown on the screen.
-   (It looks like: https://your-app-name.onrender.com/api/tiltify/webhook)
-5. Go to Tiltify (https://tiltify.com):
-   - Navigate to your Campaign Dashboard.
-   - Go to Settings -> Webhooks (or Integrations -> Webhooks).
+--------------------------------------------------------------------------------
+12. STEP 5: CONNECT TILTIFY WEBHOOKS
+--------------------------------------------------------------------------------
+1. Open your Render bot dashboard URL (e.g. https://donify-bot.onrender.com).
+2. Copy your Webhook Endpoint URL:
+   https://donify-bot.onrender.com/api/tiltify/webhook
+3. Go to Tiltify (https://tiltify.com):
+   - Campaign Dashboard -> Settings -> Webhooks.
    - Click "Add Webhook".
-   - Paste the Webhook Endpoint URL into the Payload URL field.
-   - Select events: "Donation Created" and "Auction Ended" (or All Events).
-   - Save the webhook.
+   - Paste the Webhook Endpoint URL into Payload URL.
+   - Select events: "Donation Created" and "Auction Ended".
+   - Save.
 
-Tiltify will now send every donation directly to your bot!
+--------------------------------------------------------------------------------
+13. STEP 6: KEEP YOUR BOT AWAKE 24/7 (FREE PING)
+--------------------------------------------------------------------------------
+Render puts inactive free apps to sleep after 15 minutes. Set up a free 10-minute 
+ping to keep it awake 24/7:
 
-================================================================================
-7. STEP 6: KEEP YOUR BOT AWAKE 24/7 (FREE PING SETUP)
-================================================================================
-Render's free tier puts inactive apps to sleep after 15 minutes of silence. 
-Setting up a free 10-minute ping prevents your bot from ever sleeping so alerts 
-arrive with ZERO delay.
+1. Go to https://cron-job.org and sign up.
+2. Click "Cronjobs" -> "Create Cronjob":
+   - Title: Donify Keep-Alive
+   - URL: https://YOUR-APP.onrender.com/api/status
+     (Must start with https:// and end with /api/status)
+   - Schedule: "Every 10 minutes"
+   - Method: GET
+3. Click "Create" and test it. You should see "200 OK".
 
-1. Go to https://cron-job.org and create a free account.
-2. Click "Cronjobs" -> "Create Cronjob".
-3. Configure the job with these exact settings:
-   - Title: Tiltify Bot Keep-Alive
-   - URL: https://YOUR-APP-NAME.onrender.com/api/status
-     *** CRITICAL: Make sure the URL starts with https://, NOT http:// ***
-     *** Replace YOUR-APP-NAME with your real Render app address ***
-   - Execution schedule: "Every 10 minutes"
-   - Request Method: GET
-   - Advanced -> Request Timeout: 30 seconds
-4. Click "Create".
-5. Test it by clicking the "Run now / Test" button. You should see "200 OK"!
+--------------------------------------------------------------------------------
+14. TESTING YOUR ALERTS & TROUBLESHOOTING FAQ
+--------------------------------------------------------------------------------
+* How to Test:
+  Open your Render bot dashboard and click "Test Alert" in the top bar. You 
+  will instantly see a card in Discord! You can also use the "Donation Sandbox" 
+  tab to simulate custom donor names, rewards, and auction wins.
 
-* Note: /api/status is completely public and never requires a passcode, so 
-  your ping will work 24/7 without issues.
+* Q: Where do I edit colors, bot avatar, or donor embed formatting?
+  A: In the "Visual Customizer" tab of your bot dashboard.
 
-================================================================================
-8. STEP 7: TEST YOUR ALERTS
-================================================================================
-You don't have to wait for a real donation to verify everything works:
+* Q: Does editing GitHub Variables require re-deploying Render?
+  A: No! GitHub Variables only control the Live Auction Social Card sync action. 
+  Render runs the donation webhook server independently.
 
-1. Open your bot dashboard.
-2. In the top navigation bar, click "Test Alert".
-   - Check Discord! You should immediately see a test donation card.
-3. Switch to the "Donation Sandbox & Tester" tab:
-   - Test custom donor names, amounts, and donor messages.
-   - Test reward fulfillment (shirts, stickers, custom rewards).
-   - Test Tiltify Auction House notifications (winning bidder, delivery address).
+* Q: How often does the auction card update on Short.io?
+  A: Every 10 minutes automatically via GitHub Actions, or instantly whenever 
+  you click "Run workflow" in GitHub Actions.
 
 ================================================================================
-9. TROUBLESHOOTING & FAQ
-================================================================================
-Q: My Discord test alert didn't show up.
-A: Check that your DISCORD_WEBHOOK_URL is configured in Render Environment 
-   Variables (or pasted in the Discord Webhook & Bot Info tab).
-
-Q: Why shouldn't I commit data/app-config.json to GitHub?
-A: That file stores local dashboard settings. It is already added to .gitignore 
-   so your tokens and webhooks will never leak to GitHub. Always use Render's 
-   Environment Variables for private secrets.
-
-Q: cron-job.org failed or sent me a failure email.
-A: 1. Check that the URL begins with "https://" (http will cause a 301 error).
-   2. Ensure the schedule is set to Every 10 minutes (not once an hour).
-   3. Ensure you used /api/status at the end of your real Render URL.
-
-Q: Will Tiltify webhooks be blocked if I have an admin passcode set?
-A: No! The passcode only protects the settings dashboard from unauthorized 
-   browsers. Tiltify webhooks (/api/tiltify/webhook) and status checks 
-   (/api/status) are always open and functional.
-
-Q: How do I change my bot's name or avatar?
-A: In the "Visual Customizer" or "Webhook & Bot Info" tab, customize the 
-   "Bot Display Name" and upload any custom PNG/JPEG or choose your favorite 
-   embed theme color.
-
-================================================================================
-10. TILTIFY LIVE AUCTION HOUSE & DYNAMIC SHORT.IO LINK SETUP
-================================================================================
-The repository includes an automated GitHub Action (.github/workflows/auction-sync.yml) 
-and script (sync-auction.js) to keep your Short.io dynamic link (0mie4.kids/auctions) 
-synced with live Tiltify auctions:
-
-1. How the Banner Image Works:
-   - Automatic (Zero maintenance): If no banner is uploaded, the script automatically 
-     uses the photo from the auction that currently has the highest bid!
-   - Fixed Campaign Banner: Drop a 1200x630px image named banner.png (or .jpg) 
-     into the public/ folder of your repo. The script will automatically use it 
-     for the social card preview.
-
-2. Short.io & DNS Clean-up (No Cloudflare Worker needed):
-   - In Short.io: Set destination (Original URL) of 0mie4.kids/auctions to your 
-     GitHub Pages URL: https://0mie.github.io/Donify/
-   - In Porkbun (DNS): Remove any leftover worker CNAME records pointing to 
-     auction-card.donify.workers.dev. Keep only Short.io records.
-   - In Cloudflare: You can delete the auction-card worker.
-
-3. GitHub Secrets (Repository Settings -> Secrets and variables -> Actions):
-   - TILTIFY_CLIENT_ID: Your Tiltify App Client ID
-   - TILTIFY_CLIENT_SECRET: Your Tiltify App Client Secret
-   - SHORT_IO_API_KEY: Your Short.io API key (optional for auto-syncing link title)
-   - SHORT_IO_LINK_ID: Your Short.io link ID (optional)
-
-================================================================================
-Enjoy your automated Tiltify donation alerts!
+                    Happy Fundraising & Good Luck!
 ================================================================================

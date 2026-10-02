@@ -108,15 +108,64 @@ async function syncAuctions() {
   // Helper to extract numeric bid amount safely
   const parseBidAmount = (item) => {
     if (!item) return 0;
-    const bidVal = item.current_bid?.value ?? 
-                   item.current_bid?.amount ?? 
-                   item.current_bid ?? 
-                   item.starting_bid?.value ?? 
-                   item.starting_bid?.amount ?? 
-                   item.starting_bid ?? 
-                   0;
-    return typeof bidVal === 'number' ? bidVal : parseFloat(bidVal) || 0;
+    
+    // Tiltify API v5 stores active high bids in winning_bid or winningBid (amount.value)
+    const candidates = [
+      item.winning_bid?.amount?.value,
+      item.winning_bid?.value,
+      item.winning_bid?.amount,
+      item.winning_bid,
+      item.winningBid?.amount?.value,
+      item.winningBid?.value,
+      item.winningBid?.amount,
+      item.winningBid,
+      item.high_bid?.amount?.value,
+      item.high_bid?.value,
+      item.high_bid,
+      item.highest_bid?.amount?.value,
+      item.highest_bid?.value,
+      item.highest_bid,
+      item.current_bid?.amount?.value,
+      item.current_bid?.value,
+      item.current_bid?.amount,
+      item.current_bid,
+      item.starting_bid?.amount?.value,
+      item.starting_bid?.value,
+      item.starting_bid?.amount,
+      item.starting_bid,
+      item.startingBid?.amount?.value,
+      item.startingBid?.value,
+      item.startingBid?.amount,
+      item.startingBid
+    ];
+
+    for (const val of candidates) {
+      if (val !== undefined && val !== null && val !== '') {
+        const num = typeof val === 'number' ? val : parseFloat(val);
+        if (!isNaN(num) && num > 0) return num;
+      }
+    }
+    return 0;
   };
+
+  // Helper to format currency (e.g., $2.50 or $10)
+  const formatMoney = (amount) => {
+    if (!amount || amount <= 0) return '$0';
+    if (Number.isInteger(amount)) {
+      return `$${amount.toLocaleString('en-US')}`;
+    }
+    return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Log all retrieved items and their bids for transparency
+  if (activeAuctions.length > 0) {
+    console.log('📋 Active auction items found:');
+    for (const item of activeAuctions) {
+      const name = item.name || item.title || item.slug || 'Unknown Item';
+      const bid = parseBidAmount(item);
+      console.log(`   • "${name}" -> Bid: ${formatMoney(bid)}`);
+    }
+  }
 
   // Find the item with the highest current bid
   const sorted = [...activeAuctions].sort((a, b) => parseBidAmount(b) - parseBidAmount(a));
@@ -124,9 +173,7 @@ async function syncAuctions() {
 
   const topItemName = topItem?.name || topItem?.title || 'Charity Items';
   const topBidAmount = parseBidAmount(topItem);
-  const topItemBid = topBidAmount > 0 
-    ? `$${topBidAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` 
-    : '$0';
+  const topItemBid = formatMoney(topBidAmount);
 
   // 3. Banner Image Detection:
   //    Checks for public/banner.png (or .jpg), otherwise falls back to top item photo
