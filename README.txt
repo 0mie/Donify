@@ -18,6 +18,10 @@ charity campaigns:
 You do NOT need programming experience to use this. Everything is designed to 
 be managed directly from GitHub and simple web dashboards.
 
+⏱️ ESTIMATED SETUP TIME FOR A NEW USER:
+• Quick Start (Discord Alerts via Webhook + Render Hosting): ~5 to 10 minutes
+• Full Setup (Discord Bot + Live Auction Hub + GitHub Pages): ~15 minutes
+
 ================================================================================
 TABLE OF CONTENTS
 ================================================================================
@@ -26,18 +30,20 @@ PART I: DYNAMIC LIVE AUCTION HUB & SHORT.IO (0mie4.kids/auctions)
   2. Editing Titles & Descriptions Without Touching Code (GitHub Variables)
   3. Editing Titles & Descriptions in Code (sync-auction.js Lines 1-25)
   4. Character Count Guidelines (Avoid Social Truncation)
-  5. Custom Campaign Banner Images & Automatic Cache-Busting
+  5. Custom Campaign Banner Images & Dynamic Bidding War Switching
   6. Required GitHub Secrets & Setup (Step-by-Step)
   7. Handling Dual Domains (0mie4.kids vs omie4.kids)
 
 PART II: DISCORD DONATION ALERT BOT (Render 24/7 Hosting)
-  8. Step 1: Create a Discord Webhook
-  9. Step 2: Deploy to Render for Free
- 10. Step 3: Configure Environment Secrets in Render
- 11. Step 4: Admin Passcode Protection
- 12. Step 5: Connect Tiltify Webhooks
- 13. Step 6: Keep Your Bot Awake 24/7 (Free Ping)
- 14. Step 7: Testing Your Alerts & Troubleshooting FAQ
+  8. Discord Connection: Webhook URL vs. Bot Token (Which to Choose?)
+  9. Step 1: Create a Discord Webhook (or Get Bot Token)
+ 10. Step 2: Deploy to Render for Free
+ 11. Step 3: Configure Environment Secrets in Render (& Permanent Persistence)
+ 12. Step 4: Admin Passcode Protection
+ 13. Step 5: Connect Tiltify Webhooks
+ 14. Step 6: Keep Your Bot Awake 24/7 (Free Ping)
+ 15. Standalone Discord Channels (Auctions vs. Regular Donations)
+ 16. Testing Your Alerts & Troubleshooting FAQ
 
 ================================================================================
 PART I: DYNAMIC LIVE AUCTION HUB & SHORT.IO (0mie4.kids/auctions)
@@ -308,6 +314,18 @@ In your Render Web Service settings, add these Environment Variables:
 
 Click "Save Changes" / "Create Web Service". Render will securely deploy.
 
+💡 NEVER LOSE DASHBOARD CUSTOMIZATIONS ON REDEPLOY:
+Render containers use temporary cloud disks that reset when you push new code to 
+GitHub. Donify automatically protects your settings in two ways:
+1. BROWSER AUTO-RESTORE: Your browser automatically remembers your custom colors, 
+   bot names, and auction settings, and syncs them back to Render on next visit.
+2. 100% PERMANENT RENDER PERSISTENCE (RECOMMENDED):
+   - In your Donify dashboard top bar, click "Backup & Sync".
+   - Under "DONIFY_CONFIG", click "Copy Value".
+   - In Render -> Your Web Service -> Environment tab, add:
+     DONIFY_CONFIG = <paste copied JSON value>
+   Render will permanently remember all your settings across every rebuild forever!
+
 --------------------------------------------------------------------------------
 12. STEP 4: ADMIN PASSCODE PROTECTION
 --------------------------------------------------------------------------------
@@ -382,6 +400,12 @@ Discord channels (e.g. #donations and #auctions):
 
 * Q: Where do I edit colors, bot avatar, or donor embed formatting?
   A: In the "Visual Customizer" tab of your bot dashboard.
+
+* Q: Why did my dashboard settings reset after pushing new code to GitHub?
+  A: Render runs on temporary cloud containers that reset when rebuilding from Git. 
+  Donify now automatically backs up your settings in your browser and auto-restores 
+  them to the server. For 100% permanent server persistence, click "Backup & Sync" 
+  in your dashboard and add the DONIFY_CONFIG variable to your Render Environment tab!
 
 * Q: Does editing GitHub Variables require re-deploying Render?
   A: No! GitHub Variables only control the Live Auction Social Card sync action. 

@@ -311,6 +311,25 @@ function loadDonationsFromDisk(): boolean {
 
 function loadConfigFromDisk() {
   try {
+    // 0. Support DONIFY_CONFIG environment variable (holds complete stringified JSON of all settings for Render)
+    if (process.env.DONIFY_CONFIG) {
+      try {
+        const envConfig = JSON.parse(process.env.DONIFY_CONFIG);
+        if (envConfig.discord && typeof envConfig.discord === "object") {
+          state.discord = { ...state.discord, ...envConfig.discord };
+        }
+        if (envConfig.tiltify && typeof envConfig.tiltify === "object") {
+          state.tiltify = { ...state.tiltify, ...envConfig.tiltify };
+        }
+        if (envConfig.adminPassword && typeof envConfig.adminPassword === "string") {
+          state.adminPassword = envConfig.adminPassword;
+        }
+        console.log("[Config Persistence] Successfully applied configuration from DONIFY_CONFIG environment variable");
+      } catch (err: any) {
+        console.warn("[Config Persistence] Failed to parse DONIFY_CONFIG env variable:", err.message);
+      }
+    }
+
     if (fs.existsSync(CONFIG_FILE)) {
       const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
       const parsed = JSON.parse(raw);
@@ -2935,6 +2954,41 @@ app.post("/api/config", requireAuth, (req: Request, res: Response) => {
 
   res.json({
     success: true,
+    discord: state.discord,
+    tiltify: state.tiltify,
+    status: state.botStatus,
+  });
+});
+
+// 2.05 GET /api/config/export: Export entire configuration as JSON for Render backup
+app.get("/api/config/export", requireAuth, (_req: Request, res: Response) => {
+  const exportPayload = {
+    discord: state.discord,
+    tiltify: state.tiltify,
+    exportedAt: new Date().toISOString(),
+  };
+  res.json(exportPayload);
+});
+
+// 2.06 POST /api/config/import: Import full configuration JSON
+app.post("/api/config/import", requireAuth, (req: Request, res: Response) => {
+  const { discord, tiltify } = req.body;
+  if (discord && typeof discord === "object") {
+    state.discord = { ...state.discord, ...discord };
+  }
+  if (tiltify && typeof tiltify === "object") {
+    state.tiltify = { ...state.tiltify, ...tiltify };
+  }
+  state.botStatus.discordConfigured = Boolean(
+    state.discord.webhookUrl || (state.discord.botToken && state.discord.channelId)
+  );
+  state.botStatus.tiltifyConfigured = Boolean(
+    state.tiltify.campaignId || state.tiltify.apiToken || (state.tiltify.clientId && state.tiltify.clientSecret)
+  );
+  saveConfigToDisk();
+  res.json({
+    success: true,
+    message: "Configuration successfully imported and saved!",
     discord: state.discord,
     tiltify: state.tiltify,
     status: state.botStatus,

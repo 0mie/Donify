@@ -6,6 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
-data/
-data/*
-!data/.gitkeep
+data/custom-*.bin
+data/donations.json

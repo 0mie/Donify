@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BotStatus } from '../types';
-import { Bot, Radio, HelpCircle, BellRing, Lock, ShieldCheck, ShieldAlert, KeyRound, LogOut, ChevronDown } from 'lucide-react';
+import { Bot, Radio, HelpCircle, BellRing, Lock, ShieldCheck, ShieldAlert, KeyRound, LogOut, ChevronDown, HardDrive } from 'lucide-react';
 
 interface NavbarProps {
   status: BotStatus;
   hasPassword: boolean;
   onOpenGuide: () => void;
+  onOpenBackup: () => void;
   onQuickTest: () => void;
   onSetupPasscode: () => void;
   onChangePasscode: () => void;
@@ -16,6 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   status,
   hasPassword,
   onOpenGuide,
+  onOpenBackup,
   onQuickTest,
   onSetupPasscode,
   onChangePasscode,
@@ -146,6 +148,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <BellRing className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden sm:inline">Test Alert</span>
+          </button>
+
+          {/* Backup & Persistence Button */}
+          <button
+            onClick={onOpenBackup}
+            className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-medium border border-neutral-700 transition-colors shadow-sm"
+            title="Backup settings & Render persistence"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-teal-400" />
+            <span className="hidden sm:inline">Backup & Sync</span>
           </button>
 
           {/* Setup Guide Button */}

@@ -1,0 +1,34 @@
+{
+  "adminPassword": "",
+  "discord": {
+    "mode": "webhook",
+    "webhookUrl": "",
+    "botToken": "",
+    "channelId": "",
+    "botName": "Donify Alert",
+    "avatarUrl": "",
+    "embedColor": "#00FF9D",
+    "campaignName": "",
+    "titleTemplate": "🎉 New Donation Received on Tiltify!",
+    "enableDonationAlerts": true,
+    "enableMilestoneAlerts": true,
+    "enableAuctionAlerts": true,
+    "footerText": "Tiltify Donation Alerts",
+    "footerIconUrl": "",
+    "auctionFooterText": "Tiltify Auction House • Winner Fulfillment",
+    "separateAuctionChannel": false,
+    "auctionWebhookUrl": "",
+    "auctionChannelId": ""
+  },
+  "tiltify": {
+    "clientId": "",
+    "clientSecret": "",
+    "apiToken": "",
+    "campaignId": "0mie-charity-2026",
+    "campaignName": "",
+    "pollIntervalSeconds": 30,
+    "pollingEnabled": false,
+    "webhookSecret": "",
+    "autoPullPreviousAuctions": true
+  }
+}

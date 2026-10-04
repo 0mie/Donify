@@ -7,6 +7,7 @@ import { LiveFeed } from './components/LiveFeed';
 import { PrizeShippingCenter } from './components/PrizeShippingCenter';
 import { SetupGuideModal } from './components/SetupGuideModal';
 import { AdminLockModal } from './components/AdminLockModal';
+import { BackupModal } from './components/BackupModal';
 import { DiscordConfig, TiltifyConfig, DonationRecord, BotStatus, ClaimedReward, AuctionWinnerInfo } from './types';
 import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw, Package } from 'lucide-react';
 
@@ -32,6 +33,7 @@ function getLocalConfigBackup(): { discord?: Partial<DiscordConfig>; tiltify?: P
 export default function App() {
   const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'prizes' | 'feed' | 'simulator'>('discord');
   const [guideOpen, setGuideOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const [discordConfig, setDiscordConfig] = useState<DiscordConfig>({
@@ -129,47 +131,72 @@ export default function App() {
         let serverDiscord = data.discord || {};
         let serverTiltify = data.tiltify || {};
 
-        // Auto-Restore Protection:
-        // If the server was freshly redeployed or restarted with blank values,
-        // recover the user's previously saved preferences from browser backup!
+        // Comprehensive Auto-Restore Protection:
+        // When Render redeploys from a new Git push, the ephemeral disk resets.
+        // We compare the server config with the browser's local backup.
+        // If the backup contains customized settings that the server is currently missing
+        // or has at default placeholder values, restore them!
         const backup = getLocalConfigBackup();
         let needsRestoreSync = false;
 
         if (backup) {
-          if (
-            !serverDiscord.webhookUrl &&
-            !serverDiscord.botToken &&
-            (backup.discord?.webhookUrl || backup.discord?.botToken)
-          ) {
-            serverDiscord = { ...serverDiscord, ...backup.discord };
-            needsRestoreSync = true;
-          }
-          if (
-            !serverTiltify.campaignId &&
-            !serverTiltify.clientId &&
-            backup.tiltify?.campaignId
-          ) {
-            serverTiltify = { ...serverTiltify, ...backup.tiltify };
-            needsRestoreSync = true;
-          }
-        }
+          const mergedDiscord = { ...serverDiscord };
+          const mergedTiltify = { ...serverTiltify };
 
-        if (needsRestoreSync) {
-          try {
-            const syncRes = await authFetch('/api/config', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ discord: serverDiscord, tiltify: serverTiltify }),
-            });
-            const syncType = syncRes.headers.get('content-type') || '';
-            if (syncRes.ok && syncType.includes('application/json')) {
-              const syncData = await syncRes.json();
-              if (syncData.discord) serverDiscord = syncData.discord;
-              if (syncData.tiltify) serverTiltify = syncData.tiltify;
-              if (syncData.status) setStatus(syncData.status);
+          // Restore Discord custom fields if server has blank or default values
+          if (backup.discord) {
+            const b = backup.discord;
+            if (b.webhookUrl && !serverDiscord.webhookUrl) { mergedDiscord.webhookUrl = b.webhookUrl; needsRestoreSync = true; }
+            if (b.botToken && !serverDiscord.botToken) { mergedDiscord.botToken = b.botToken; needsRestoreSync = true; }
+            if (b.channelId && !serverDiscord.channelId) { mergedDiscord.channelId = b.channelId; needsRestoreSync = true; }
+            if (b.botUsername && b.botUsername !== 'Tiltify Donation Bot' && (!serverDiscord.botUsername || serverDiscord.botUsername === 'Tiltify Donation Bot')) { mergedDiscord.botUsername = b.botUsername; needsRestoreSync = true; }
+            if (b.botAvatarUrl && !serverDiscord.botAvatarUrl) { mergedDiscord.botAvatarUrl = b.botAvatarUrl; needsRestoreSync = true; }
+            if (b.embedColor && b.embedColor !== '#00d1b2' && (!serverDiscord.embedColor || serverDiscord.embedColor === '#00d1b2')) { mergedDiscord.embedColor = b.embedColor; needsRestoreSync = true; }
+            if (b.auctionEmbedColor && !serverDiscord.auctionEmbedColor) { mergedDiscord.auctionEmbedColor = b.auctionEmbedColor; needsRestoreSync = true; }
+            if (b.campaignName && !serverDiscord.campaignName) { mergedDiscord.campaignName = b.campaignName; needsRestoreSync = true; }
+            if (b.embedTitleTemplate && !serverDiscord.embedTitleTemplate) { mergedDiscord.embedTitleTemplate = b.embedTitleTemplate; needsRestoreSync = true; }
+            if (b.footerText && !serverDiscord.footerText) { mergedDiscord.footerText = b.footerText; needsRestoreSync = true; }
+            if (b.footerIconUrl && !serverDiscord.footerIconUrl) { mergedDiscord.footerIconUrl = b.footerIconUrl; needsRestoreSync = true; }
+            if (b.auctionFooterText && !serverDiscord.auctionFooterText) { mergedDiscord.auctionFooterText = b.auctionFooterText; needsRestoreSync = true; }
+            if (b.separateAuctionChannel !== undefined && b.separateAuctionChannel !== serverDiscord.separateAuctionChannel) { mergedDiscord.separateAuctionChannel = b.separateAuctionChannel; needsRestoreSync = true; }
+            if (b.auctionWebhookUrl && !serverDiscord.auctionWebhookUrl) { mergedDiscord.auctionWebhookUrl = b.auctionWebhookUrl; needsRestoreSync = true; }
+            if (b.auctionChannelId && !serverDiscord.auctionChannelId) { mergedDiscord.auctionChannelId = b.auctionChannelId; needsRestoreSync = true; }
+            if (b.enableAuctionAlerts !== undefined && b.enableAuctionAlerts !== serverDiscord.enableAuctionAlerts) { mergedDiscord.enableAuctionAlerts = b.enableAuctionAlerts; needsRestoreSync = true; }
+          }
+
+          // Restore Tiltify custom fields
+          if (backup.tiltify) {
+            const t = backup.tiltify;
+            if (t.campaignId && (!serverTiltify.campaignId || serverTiltify.campaignId === '0mie-charity-2026')) { mergedTiltify.campaignId = t.campaignId; needsRestoreSync = true; }
+            if (t.campaignName && !serverTiltify.campaignName) { mergedTiltify.campaignName = t.campaignName; needsRestoreSync = true; }
+            if (t.clientId && !serverTiltify.clientId) { mergedTiltify.clientId = t.clientId; needsRestoreSync = true; }
+            if (t.clientSecret && !serverTiltify.clientSecret) { mergedTiltify.clientSecret = t.clientSecret; needsRestoreSync = true; }
+            if (t.apiToken && !serverTiltify.apiToken) { mergedTiltify.apiToken = t.apiToken; needsRestoreSync = true; }
+            if (t.autoPullPreviousAuctions !== undefined && t.autoPullPreviousAuctions !== serverTiltify.autoPullPreviousAuctions) { mergedTiltify.autoPullPreviousAuctions = t.autoPullPreviousAuctions; needsRestoreSync = true; }
+            if (t.auctionDateRangeStart && !serverTiltify.auctionDateRangeStart) { mergedTiltify.auctionDateRangeStart = t.auctionDateRangeStart; needsRestoreSync = true; }
+            if (t.auctionDateRangeEnd && !serverTiltify.auctionDateRangeEnd) { mergedTiltify.auctionDateRangeEnd = t.auctionDateRangeEnd; needsRestoreSync = true; }
+            if (t.auctionHouseIdOrSlug && !serverTiltify.auctionHouseIdOrSlug) { mergedTiltify.auctionHouseIdOrSlug = t.auctionHouseIdOrSlug; needsRestoreSync = true; }
+          }
+
+          if (needsRestoreSync) {
+            serverDiscord = mergedDiscord;
+            serverTiltify = mergedTiltify;
+            try {
+              const syncRes = await authFetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ discord: serverDiscord, tiltify: serverTiltify }),
+              });
+              const syncType = syncRes.headers.get('content-type') || '';
+              if (syncRes.ok && syncType.includes('application/json')) {
+                const syncData = await syncRes.json();
+                if (syncData.discord) serverDiscord = syncData.discord;
+                if (syncData.tiltify) serverTiltify = syncData.tiltify;
+                if (syncData.status) setStatus(syncData.status);
+              }
+            } catch (syncErr) {
+              console.warn('[App] Failed to auto-sync restored backup to server:', syncErr);
             }
-          } catch (syncErr) {
-            console.warn('[App] Failed to auto-sync restored backup to server:', syncErr);
           }
         }
 
@@ -177,8 +204,10 @@ export default function App() {
         setTiltifyConfig(serverTiltify);
         if (data.status) setStatus(data.status);
 
-        // Keep local backup up to date
-        saveLocalConfigBackup(serverDiscord, serverTiltify);
+        // Keep local backup up to date only if configs are valid
+        if (serverDiscord.webhookUrl || serverDiscord.botToken || serverTiltify.campaignId) {
+          saveLocalConfigBackup(serverDiscord, serverTiltify);
+        }
       }
     } catch (err) {
       console.warn('Failed to load server config:', err);
@@ -335,6 +364,28 @@ export default function App() {
     saveLocalConfigBackup(data.discord || discordConfig, data.tiltify);
   };
 
+  // Import configuration JSON
+  const handleImportConfig = async (discord: DiscordConfig, tiltify: TiltifyConfig): Promise<boolean> => {
+    try {
+      const res = await authFetch('/api/config/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discord, tiltify }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.discord) setDiscordConfig(data.discord);
+        if (data.tiltify) setTiltifyConfig(data.tiltify);
+        if (data.status) setStatus(data.status);
+        saveLocalConfigBackup(data.discord || discord, data.tiltify || tiltify);
+        return true;
+      }
+    } catch (e) {
+      console.error('Failed to import config:', e);
+    }
+    return false;
+  };
+
   // Dispatch Discord Test
   const handleTestDiscord = async (overrideCampaignName?: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -430,6 +481,7 @@ export default function App() {
         status={status}
         hasPassword={hasPassword}
         onOpenGuide={() => setGuideOpen(true)}
+        onOpenBackup={() => setBackupOpen(true)}
         onQuickTest={handleTestDiscord}
         onSetupPasscode={() => setAuthModalMode('setup')}
         onChangePasscode={() => setAuthModalMode('change')}
@@ -637,6 +689,15 @@ export default function App() {
         isOpen={guideOpen}
         onClose={() => setGuideOpen(false)}
         webhookEndpoint={webhookEndpoint}
+      />
+
+      {/* Backup & Render Persistence Modal */}
+      <BackupModal
+        isOpen={backupOpen}
+        onClose={() => setBackupOpen(false)}
+        discordConfig={discordConfig}
+        tiltifyConfig={tiltifyConfig}
+        onImportConfig={handleImportConfig}
       />
 
       {/* Admin Passcode Modal (Login / Setup / Change) */}
