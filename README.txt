@@ -314,7 +314,36 @@ ping to keep it awake 24/7:
 3. Click "Create" and test it. You should see "200 OK".
 
 --------------------------------------------------------------------------------
-14. TESTING YOUR ALERTS & TROUBLESHOOTING FAQ
+14. STANDALONE DISCORD CHANNELS (AUCTIONS VS REGULAR DONATIONS)
+--------------------------------------------------------------------------------
+If you want to keep regular donation alerts and auction house wins in separate 
+Discord channels (e.g. #donations and #auctions):
+
+1. IN DISCORD WEBHOOK MODE:
+   - Discord webhooks are permanently tied to a single channel.
+   - Go to your auction channel (e.g. #auctions) -> Edit Channel -> Integrations -> 
+     Webhooks -> Create Webhook.
+   - In Donify Dashboard -> Discord Settings -> Auction House Notifications:
+     Check "Route Auction House Alerts to a Standalone Channel" and paste your 
+     new Auction Webhook URL.
+   - Standard donations will post to your main channel; auction winning bids and 
+     prize fulfillment alerts will post to your dedicated auction channel!
+
+2. IN BOT TOKEN MODE:
+   - No extra webhook needed! Your bot can post to any channel in your server.
+   - In Discord, right-click your dedicated auction channel and click "Copy Channel ID" 
+     (requires Developer Mode enabled in Discord User Settings -> Advanced).
+   - In Donify Dashboard -> Discord Settings -> Auction House Notifications:
+     Check "Route Auction House Alerts to a Standalone Channel" and paste the 
+     Auction Channel ID.
+
+3. OPTIONAL ENVIRONMENT VARIABLES (Render):
+   - DISCORD_SEPARATE_AUCTION_CHANNEL=true
+   - DISCORD_AUCTION_WEBHOOK_URL=https://discord.com/api/webhooks/...
+   - DISCORD_AUCTION_CHANNEL_ID=123456789012345678
+
+--------------------------------------------------------------------------------
+15. TESTING YOUR ALERTS & TROUBLESHOOTING FAQ
 --------------------------------------------------------------------------------
 * How to Test:
   Open your Render bot dashboard and click "Test Alert" in the top bar. You 

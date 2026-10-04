@@ -80,6 +80,9 @@ const state: {
     footerText: process.env.DISCORD_FOOTER_TEXT || "Tiltify Donation Alerts",
     footerIconUrl: process.env.DISCORD_FOOTER_ICON_URL || "",
     auctionFooterText: process.env.DISCORD_AUCTION_FOOTER_TEXT || "Tiltify Auction House • Winner Fulfillment",
+    separateAuctionChannel: process.env.DISCORD_SEPARATE_AUCTION_CHANNEL === "true" || Boolean(process.env.DISCORD_AUCTION_WEBHOOK_URL || process.env.DISCORD_AUCTION_CHANNEL_ID),
+    auctionWebhookUrl: (process.env.DISCORD_AUCTION_WEBHOOK_URL || "").trim(),
+    auctionChannelId: (process.env.DISCORD_AUCTION_CHANNEL_ID || "").trim(),
   },
   tiltify: {
     clientId: (process.env.TILTIFY_CLIENT_ID || "").trim(),
@@ -326,6 +329,11 @@ function loadConfigFromDisk() {
         if (process.env.DISCORD_BOT_TOKEN) state.discord.botToken = process.env.DISCORD_BOT_TOKEN.trim();
         if (process.env.DISCORD_CHANNEL_ID) state.discord.channelId = process.env.DISCORD_CHANNEL_ID.trim();
         if (process.env.DISCORD_WEBHOOK_URL) state.discord.webhookUrl = process.env.DISCORD_WEBHOOK_URL.trim();
+        if (process.env.DISCORD_AUCTION_WEBHOOK_URL) state.discord.auctionWebhookUrl = process.env.DISCORD_AUCTION_WEBHOOK_URL.trim();
+        if (process.env.DISCORD_AUCTION_CHANNEL_ID) state.discord.auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID.trim();
+        if (process.env.DISCORD_SEPARATE_AUCTION_CHANNEL !== undefined) {
+          state.discord.separateAuctionChannel = process.env.DISCORD_SEPARATE_AUCTION_CHANNEL === "true";
+        }
       }
       if (parsed.tiltify && typeof parsed.tiltify === "object") {
         state.tiltify = {
@@ -1118,8 +1126,18 @@ async function dispatchDiscordAlert(
     }
 
     if (config.mode === "webhook") {
-      if (!config.webhookUrl) {
-        return { success: false, error: "Discord Webhook URL is not configured." };
+      const isTargetingAuction = isAuction && config.separateAuctionChannel && Boolean(config.auctionWebhookUrl?.trim());
+      const targetWebhookUrl = isTargetingAuction
+        ? config.auctionWebhookUrl!.trim()
+        : config.webhookUrl?.trim();
+
+      if (!targetWebhookUrl) {
+        return {
+          success: false,
+          error: isAuction && config.separateAuctionChannel
+            ? "Dedicated Auction Webhook URL is enabled but not configured."
+            : "Discord Webhook URL is not configured.",
+        };
       }
 
       let avatarUrl = config.botAvatarUrl || "https://tiltify.com/favicon.ico";
@@ -1150,7 +1168,7 @@ async function dispatchDiscordAlert(
         "Accept": "application/json",
       };
 
-      const primaryUrl = config.webhookUrl.trim();
+      const primaryUrl = targetWebhookUrl;
       let response = await fetch(primaryUrl, {
         method: "POST",
         headers: customHeaders,
@@ -1207,11 +1225,21 @@ async function dispatchDiscordAlert(
       if (!config.botToken) {
         return { success: false, error: "Discord Bot Token is not configured." };
       }
-      if (!config.channelId) {
-        return { success: false, error: "Discord Channel ID is not configured." };
+      const isTargetingAuction = isAuction && config.separateAuctionChannel && Boolean(config.auctionChannelId?.trim());
+      const targetChannelId = isTargetingAuction
+        ? config.auctionChannelId!.trim()
+        : config.channelId?.trim();
+
+      if (!targetChannelId) {
+        return {
+          success: false,
+          error: isAuction && config.separateAuctionChannel
+            ? "Dedicated Auction Channel ID is enabled but not configured."
+            : "Discord Channel ID is not configured.",
+        };
       }
 
-      const botUrl = `https://discord.com/api/v10/channels/${config.channelId.trim()}/messages`;
+      const botUrl = `https://discord.com/api/v10/channels/${targetChannelId}/messages`;
       const response = await fetch(botUrl, {
         method: "POST",
         headers: {
@@ -3288,7 +3316,11 @@ app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) =
     )}, Bot Token set: ${Boolean(state.discord.botToken)}`
   );
 
-  const result = await dispatchDiscordAlert(testDonation, state.discord);
+  const effectiveDiscord = req.body.discordConfig
+    ? { ...state.discord, ...req.body.discordConfig }
+    : state.discord;
+
+  const result = await dispatchDiscordAlert(testDonation, effectiveDiscord);
   console.log(
     `[Discord Test] Result: ${result.success ? "SUCCESS" : "FAILED - " + result.error}`
   );

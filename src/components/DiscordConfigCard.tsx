@@ -137,6 +137,8 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   const [showSecrets, setShowSecrets] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isTestingAuction, setIsTestingAuction] = useState(false);
+  const [auctionTestStatus, setAuctionTestStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [formTab, setFormTab] = useState<'appearance' | 'connection' | 'auctions'>('appearance');
@@ -599,6 +601,59 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
       setStatusMessage({ type: 'error', text: err.message || 'Error executing Discord test.' });
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  const handleAuctionTest = async () => {
+    setIsTestingAuction(true);
+    setAuctionTestStatus(null);
+    try {
+      await onSave({ ...localConfig, campaignName: localCampaignName }, localCampaignName);
+      const token = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/discord/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          eventType: 'auction_ended',
+          auction: {
+            auctionId: `test-auc-${Date.now()}`,
+            itemTitle: 'Charity Auction Test Lot (Signed Edition)',
+            itemDescription: 'Official high-grade test prize lot with winner fulfillment verification.',
+            winningBid: 250.0,
+            currency: 'USD',
+            winnerName: 'Victoria Champion',
+            winnerEmail: 'winner@collectors.org',
+            prizeType: 'physical',
+            shippingAddress: {
+              recipientName: 'Victoria Champion',
+              addressLine1: '777 Victory Blvd',
+              city: 'Seattle',
+              region: 'WA',
+              postalCode: '98101',
+              country: 'United States',
+            },
+          },
+          discordConfig: localConfig,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAuctionTestStatus({
+          success: true,
+          message: localConfig.separateAuctionChannel
+            ? 'Delivered to dedicated auction channel!'
+            : 'Delivered to Discord successfully!',
+        });
+      } else {
+        setAuctionTestStatus({ success: false, message: data.error || 'Failed to dispatch auction test.' });
+      }
+    } catch (err: any) {
+      setAuctionTestStatus({ success: false, message: err.message || 'Error executing auction test.' });
+    } finally {
+      setIsTestingAuction(false);
     }
   };
 
@@ -1917,6 +1972,91 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                         placeholder="Tiltify Auction House • Winner Fulfillment"
                         className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
+                    </div>
+
+                    {/* Standalone Channel Routing Section */}
+                    <div className="pt-3 border-t border-neutral-800/80 space-y-3">
+                      <div>
+                        <label className="flex items-center gap-2 cursor-pointer text-neutral-200 font-medium text-xs">
+                          <input
+                            type="checkbox"
+                            checked={localConfig.separateAuctionChannel === true}
+                            onChange={(e) => handleInputChange('separateAuctionChannel', e.target.checked)}
+                            className="rounded bg-neutral-950 border-neutral-800 text-amber-500 focus:ring-amber-500 w-4 h-4"
+                          />
+                          <span className="flex items-center gap-1.5 text-amber-300 font-semibold">
+                            <span>📡 Route Auction House Alerts to a Standalone Channel</span>
+                          </span>
+                        </label>
+                        <p className="text-[11px] text-neutral-400 pl-6 mt-1">
+                          Separate regular donations and auction house wins into their own dedicated Discord channels.
+                        </p>
+                      </div>
+
+                      {localConfig.separateAuctionChannel && (
+                        <div className="pl-4 space-y-3 bg-neutral-950/70 p-3 rounded-xl border border-amber-500/20">
+                          {localConfig.mode === 'webhook' ? (
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-medium text-neutral-200">
+                                  Auction Channel Webhook URL
+                                </label>
+                                <span className="text-[10px] text-amber-400 font-mono">
+                                  Dedicated Webhook
+                                </span>
+                              </div>
+                              <input
+                                type="url"
+                                value={localConfig.auctionWebhookUrl || ''}
+                                onChange={(e) => handleInputChange('auctionWebhookUrl', e.target.value)}
+                                placeholder="https://discord.com/api/webhooks/..."
+                                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                              />
+                              <p className="text-[11px] text-neutral-400 mt-1.5 leading-relaxed">
+                                💡 <strong>How Webhooks Work:</strong> Discord webhooks are bound to one specific channel. Create a new webhook inside your separate auction channel (e.g. <code>#auctions</code> or <code>#charity-auctions</code>) and paste its URL here. Standard campaign donations will continue posting to your primary channel webhook.
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-medium text-neutral-200">
+                                  Auction Channel ID
+                                </label>
+                                <span className="text-[10px] text-amber-400 font-mono">
+                                  Dedicated Channel
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                value={localConfig.auctionChannelId || ''}
+                                onChange={(e) => handleInputChange('auctionChannelId', e.target.value)}
+                                placeholder="e.g. 123456789012345678"
+                                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                              />
+                              <p className="text-[11px] text-neutral-400 mt-1.5 leading-relaxed">
+                                💡 <strong>How Bot Token Mode Works:</strong> No extra webhook needed! Your bot can post to any channel in the server. Right-click your dedicated auction channel in Discord (with Developer Mode enabled) and select <strong>Copy Channel ID</strong>.
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="pt-2 flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={handleAuctionTest}
+                              disabled={isTestingAuction || (localConfig.mode === 'webhook' ? !localConfig.auctionWebhookUrl : !localConfig.auctionChannelId)}
+                              className="inline-flex items-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              {isTestingAuction ? 'Sending Auction Test...' : 'Test Dedicated Auction Channel'}
+                            </button>
+                            {auctionTestStatus && (
+                              <span className={`text-xs ${auctionTestStatus.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {auctionTestStatus.message}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

@@ -84,6 +84,9 @@ export interface DiscordConfig {
   progressBarCharStyle?: ProgressBarCharStyle;
   auctionTitleTemplate?: string;
   campaignName?: string;
+  separateAuctionChannel?: boolean;
+  auctionWebhookUrl?: string;
+  auctionChannelId?: string;
 }
 
 export interface TiltifyConfig {
