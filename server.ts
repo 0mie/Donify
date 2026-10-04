@@ -291,6 +291,11 @@ function loadDonationsFromDisk(): boolean {
             state.botStatus.lastDonationTimestamp = parsed.botStatus.lastDonationTimestamp;
           }
         }
+        // Ensure totalAmountProcessed is never less than the actual sum of restored donations
+        const calculatedDonationsSum = state.donations.reduce((sum, d) => sum + (typeof d.amount === "number" && !isNaN(d.amount) ? d.amount : 0), 0);
+        if (calculatedDonationsSum > state.botStatus.totalAmountProcessed) {
+          state.botStatus.totalAmountProcessed = calculatedDonationsSum;
+        }
         console.log(`[Donations Persistence] Restored ${state.donations.length} records and ${state.seenDonationIds.size} seen IDs from disk`);
         return true;
       }
@@ -1677,7 +1682,7 @@ async function fetchAllCampaignAuctions(
           : [];
         totalListedItems = rawItems.length;
 
-        // 4. For each item, query its bids: GET /api/public/auction_items/{item.id}/auction_bids
+        // 4. For each item, query its bids: GET /api/public/auction_houses/{auction_house_id}/auction_items/{item.id}/auction_bids
         for (const item of rawItems) {
           const itemEndedAtStr = item.completed_at || item.ends_at || item.inserted_at;
           const endedMs = itemEndedAtStr ? new Date(itemEndedAtStr).getTime() : null;
@@ -1686,7 +1691,8 @@ async function fetchAllCampaignAuctions(
           if (endMs && endedMs && endedMs > endMs) continue;
 
           try {
-            const bidsUrl = `https://v5api.tiltify.com/api/public/auction_items/${encodeURIComponent(item.id)}/auction_bids?limit=100`;
+            // Must include auction_houses/{auction_house_id} in URL per Tiltify OpenAPI specification
+            const bidsUrl = `https://v5api.tiltify.com/api/public/auction_houses/${encodeURIComponent(ahObj.id)}/auction_items/${encodeURIComponent(item.id)}/auction_bids?limit=100`;
             const bidsRes = await fetch(bidsUrl, { headers });
             if (bidsRes.ok) {
               const bidsPayload = await bidsRes.json();
@@ -1696,14 +1702,33 @@ async function fetchAllCampaignAuctions(
                 ? bidsPayload
                 : [];
 
-              const winningBid =
-                bids.find((b: any) => b.current_winner) ||
-                (item.status === "completed" && bids.length > 0 ? bids[0] : null);
+              let winningBid: any = null;
+              let maxBidAmount = 0;
 
-              if (winningBid) {
-                const amountVal = parseFloat(winningBid.amount?.value || winningBid.amount || 0);
-                const currency = winningBid.amount?.currency || "USD";
-                const winnerName = (winningBid.public_name || winningBid.donor_name || "Anonymous Winner").trim();
+              // Check if an explicit winner is flagged
+              const markedWinner = bids.find((b: any) => b.current_winner || b.is_winner || b.winner);
+              if (markedWinner) {
+                winningBid = markedWinner;
+                const val = parseFloat(markedWinner.amount?.value || markedWinner.amount || markedWinner.value || 0);
+                if (!isNaN(val)) maxBidAmount = val;
+              }
+
+              // Scan ALL bids to find the true highest winning bid (protects against chronological order selecting the initial starting bid)
+              for (const b of bids) {
+                const rawVal = b.amount?.value ?? b.amount ?? b.value ?? 0;
+                const val = typeof rawVal === "number" ? rawVal : parseFloat(String(rawVal));
+                if (!isNaN(val) && val > maxBidAmount) {
+                  maxBidAmount = val;
+                  winningBid = b;
+                }
+              }
+
+              if (winningBid || item.status === "completed") {
+                const amountVal = maxBidAmount > 0
+                  ? maxBidAmount
+                  : parseFloat(item.starting_bid?.value || 0);
+                const currency = winningBid?.amount?.currency || item.starting_bid?.currency || "USD";
+                const winnerName = (winningBid?.public_name || winningBid?.donor_name || "Auction Winner").trim();
                 const imageUrl = item.images?.[0]?.src || item.avatar?.src || undefined;
                 const fairMarketValue = item.fair_market_value?.value
                   ? parseFloat(item.fair_market_value.value)
@@ -2233,6 +2258,26 @@ function extractAuctionWinnerInfo(raw: any, eventType?: string): AuctionWinnerIn
     if (raw.currency) currency = raw.currency;
   }
 
+  // Also check if auctionObj or raw has a bids array to find the true highest bid
+  const bidsArray = Array.isArray(auctionObj.bids)
+    ? auctionObj.bids
+    : Array.isArray(raw.bids)
+    ? raw.bids
+    : Array.isArray(auctionObj.auction_bids)
+    ? auctionObj.auction_bids
+    : [];
+
+  if (bidsArray.length > 0) {
+    for (const b of bidsArray) {
+      const rawVal = b.amount?.value ?? b.amount ?? b.value ?? 0;
+      const val = typeof rawVal === "number" ? rawVal : parseFloat(String(rawVal));
+      if (!isNaN(val) && val > winningBid) {
+        winningBid = val;
+        if (b.amount?.currency) currency = b.amount.currency;
+      }
+    }
+  }
+
   // Winner identity
   const winnerObj =
     auctionObj.winner ||
@@ -2578,6 +2623,15 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
               state.donations.unshift(auctionRecord);
               state.botStatus.totalAuctionsProcessed = (state.botStatus.totalAuctionsProcessed || 0) + 1;
               state.botStatus.lastDonationTimestamp = auctionRecord.receivedAt;
+            }
+          } else {
+            // Update existing auction record if winningBid changed or was previously recorded as $2 starting bid!
+            const existing = state.donations.find((d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId);
+            if (existing && itemWinner.winningBid > 0 && (existing.amount !== itemWinner.winningBid || existing.amount <= 2.0)) {
+              existing.amount = itemWinner.winningBid;
+              if (existing.auction) {
+                existing.auction.winningBid = itemWinner.winningBid;
+              }
             }
           }
         }
@@ -3382,6 +3436,13 @@ app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Re
           // Enrich existing record with updated prize and shipping details
           if (!existing.auction?.shippingAddress && auctionInfo.shippingAddress) {
             existing.auction = { ...existing.auction, ...auctionInfo };
+          }
+          // CRITICAL: Update amount if existing had an old/lower/starting bid amount ($2 vs winning bid)
+          if (auctionInfo.winningBid > 0 && (existing.amount !== auctionInfo.winningBid || existing.amount <= 2.0)) {
+            existing.amount = auctionInfo.winningBid;
+            if (existing.auction) {
+              existing.auction.winningBid = auctionInfo.winningBid;
+            }
           }
           if (sendToDiscord && existing.discordStatus !== "sent") {
             const dispatchResult = await dispatchDiscordAlert(existing, state.discord);

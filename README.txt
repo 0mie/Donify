@@ -128,44 +128,80 @@ To prevent Discord, Twitter/X, and Facebook from cutting off your text with "...
   - Example: "⚡ 4 Live Charity Auctions | Top Bid: $2.50" (~42 chars, fits all phones).
 
 --------------------------------------------------------------------------------
-5. DYNAMIC BIDDING WAR IMAGE SWITCHING & CUSTOM BANNERS
+5. DYNAMIC BIDDING WAR IMAGE SWITCHING & CUSTOM BANNERS (/public FOLDER)
 --------------------------------------------------------------------------------
-When multiple items are listed in an auction, the preview image automatically 
-updates to show whichever item currently holds the #1 highest bid!
+When multiple items are listed in an auction, the preview card can automatically 
+update to show whichever item currently holds the #1 highest bid!
 
-HOW IT WORKS:
-1. AUTOMATIC TILTIFY PHOTOS (Zero Effort):
-   You don't even need to upload extra files. The script automatically pulls the 
-   official high-res photo from Tiltify for whichever item is currently in the lead!
-   If Item A is overtaken by Item B in a bidding war, the card photo automatically 
-   switches to Item B on the next sync.
+📸 WHY UPLOAD CUSTOM 1200x630 IMAGES INSTEAD OF TILTIFY PHOTOS?
+Tiltify only allows square 800x800 photos when creating listings. When Twitter 
+or Discord renders a "summary_large_image" card, it displays in 1200x630 landscape 
+(1.91:1 ratio), which can crop the top and bottom of square photos. 
 
-2. OPTIONAL CUSTOM HIGH-RES UPLOADS (public/ folder):
-   If you want to use custom photos or graphic overlays for individual items, drop 
-   them into the public/ directory. The script matches them automatically by:
-   - Keyword: e.g. mewtwo.png matches "30th Celebration Mewtwo 63/128..."
-   - Item ID: e.g. 9be4e2b2-1b72-4a7f-9580-8d2e734a4112.png
-   - Slug: e.g. 30th-celebration-mewtwo-63-128-promo-card.png
+By uploading custom 1200x630 graphics to the "public/" folder, your card will 
+always look razor-sharp and uncropped on all social platforms!
 
-3. IDLE / CAMPAIGN BANNER (public/banner.png):
-   When all auctions end, or when no auctions are currently running, the card 
-   automatically switches to your general public/banner.png (or banner.jpg).
+--------------------------------------------------------------------------------
+📁 HOW TO UPLOAD CUSTOM ITEM IMAGES TO /public:
+--------------------------------------------------------------------------------
+1. Go directly to your GitHub repo's public folder:
+   https://github.com/0mie/Donify/tree/main/public
+2. Click "Add file" -> "Upload files".
+3. Name your file using ANY of these convenient formats:
+   
+   A. BY KEYWORD (Easiest & cleanest!):
+      - If your item is named "30th Celebration Mewtwo 63/128 Promo Card",
+        just name your file: mewtwo.png (or mewtwo.jpg).
+      - The script automatically checks if the filename is inside the item's title!
+   
+   B. BY ITEM ID (Guaranteed 100% exact match):
+      - Name the file after the Tiltify Item UUID:
+        e.g. 9be4e2b2-1b72-4a7f-9580-8d2e734a4112.png
+   
+   C. BY SLUG (Full title slug):
+      - e.g. 30th-celebration-mewtwo-63-128-promo-card.png
 
+4. Commit the file to the "main" branch.
+
+--------------------------------------------------------------------------------
+⚙️ HOW TO TOGGLE SOCIAL CARD IMAGE MODES:
+--------------------------------------------------------------------------------
+At the top of "sync-auction.js", you will find:
+
+   preferItemImage: false,  // (Default)
+
+   • false (Recommended if you want 1200x630 banner consistency):
+     Always uses your high-resolution "public/banner.png" as the card visual, 
+     while the Title and Description update dynamically with live bids!
+     (Prevents square 800x800 photos from cropping).
+
+   • true (Dynamic item image switching):
+     When auctions are live, the card automatically switches to whichever item 
+     has the #1 bid! It checks your "public/" folder first for custom graphics 
+     (like mewtwo.png), and falls back to Tiltify's official photo. When all 
+     auctions end, it automatically switches back to "banner.png".
+
+💡 You can also toggle this anytime without editing code by adding a GitHub 
+   Variable: PREFER_ITEM_IMAGE = true (or false) in:
+   GitHub -> Settings -> Secrets and variables -> Actions -> Variables tab.
+
+--------------------------------------------------------------------------------
 ⚡ AUTOMATIC CACHE-BUSTING:
-Twitter normally caches image URLs for up to 7 days. Our script automatically 
-appends a version timestamp (?v=1727856000) based on your file's upload time. 
-Whenever you upload a new image, Twitter and Discord detect the new URL 
-and refresh the image immediately!
+--------------------------------------------------------------------------------
+Twitter and Discord normally cache image URLs for up to 7 days. Our script 
+automatically appends a version timestamp (?v=1727856000) based on your file's 
+upload time. Whenever you upload a new image, Twitter and Discord detect the new 
+URL and refresh the preview card immediately!
 
 💡 PRO-TIP FOR TWITTER:
-If you post on Twitter right after an update and Twitter shows an old preview, 
+If you post on Twitter right after an update and Twitter shows an old cached preview, 
 add a dummy query param to your tweet link (e.g. 0mie4.kids/auctions?1). This 
 forces Twitter's scraper to crawl a fresh card on the spot.
 
 --------------------------------------------------------------------------------
 6. REQUIRED GITHUB SECRETS & SETUP (STEP-BY-STEP)
 --------------------------------------------------------------------------------
-To enable the 10-minute auto-sync:
+To enable the 5-minute auto-sync:
 
 1. In GitHub: Settings -> Secrets and variables -> Actions -> Secrets tab.
 2. Ensure you have the following secrets added:
