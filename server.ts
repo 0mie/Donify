@@ -1776,6 +1776,10 @@ async function fetchAllCampaignAuctions(
                   winningBid: isNaN(amountVal) ? 0 : amountVal,
                   currency,
                   winnerName,
+                  winnerEmail: winningBid?.donor_email || winningBid?.winner_email || winningBid?.email || item.winner_email || item.donor_email || undefined,
+                  prizeType: "physical",
+                  shippingAddress: winningBid?.shipping_address || winningBid?.shippingAddress || item.shipping_address || item.shippingAddress || undefined,
+                  specialInstructions: winningBid?.special_instructions || winningBid?.notes || item.special_instructions || undefined,
                   endedAt: item.completed_at || item.ends_at || new Date().toISOString(),
                   status: item.status || "completed",
                   auctionHouseId: ahObj.id,
@@ -2580,8 +2584,8 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
       }
     }
 
-    // Check campaign auctions if autoPullPreviousAuctions is enabled or state has no auction records yet
-    if (state.tiltify.autoPullPreviousAuctions || state.seenAuctionIds.size === 0) {
+    // Check campaign auctions on every poll cycle if auction alerts are enabled
+    if (state.discord.enableAuctionAlerts !== false) {
       try {
         const fullFetch = await fetchAllCampaignAuctions(campaignId, {
           startDate: state.tiltify.auctionDateRangeStart || undefined,
@@ -2592,74 +2596,97 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
 
         for (const itemWinner of fullFetch.auctions) {
           const aucId = itemWinner.itemId;
+          const isAuctionEnded = itemWinner.status === "completed" || Boolean(itemWinner.endedAt && new Date(itemWinner.endedAt).getTime() <= Date.now());
+          if (!isAuctionEnded) continue;
 
-          if (!state.seenAuctionIds.has(aucId) && !state.donations.some((d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId)) {
-            state.seenAuctionIds.add(aucId);
+          // Check if already in state.donations as an auction record
+          const existingAuctionIndex = state.donations.findIndex(
+            (d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId || d.auction?.auctionId === aucId
+          );
 
-            const existingIndex = state.donations.findIndex(
-              (d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId
+          if (existingAuctionIndex === -1) {
+            // Check if a generic donation came in from /donations polling matching this winner or payment:
+            const genericIndex = state.donations.findIndex(
+              (d) => !d.auction && d.eventType !== "auction_ended" &&
+                ((d.donorName && d.donorName.toLowerCase() === itemWinner.winnerName.toLowerCase()) ||
+                 (d.amount <= 2.01 && (itemWinner.winningBid <= 2.01 || Math.abs(d.amount - itemWinner.winningBid) < 0.01)))
             );
 
-            if (existingIndex === -1) {
-              const effectiveCampaignName =
-                state.tiltify.campaignName?.trim() ||
-                state.discord.campaignName?.trim() ||
-                campaignSummary?.campaignName ||
-                "Tiltify Campaign";
+            const effectiveCampaignName =
+              state.tiltify.campaignName?.trim() ||
+              state.discord.campaignName?.trim() ||
+              campaignSummary?.campaignName ||
+              "Tiltify Campaign";
 
-              const auctionRecord: DonationRecord = {
-                id: `auc-${aucId}`,
-                tiltifyId: aucId,
-                eventType: "auction_ended",
-                donorName: itemWinner.winnerName,
-                donorEmail: itemWinner.winnerEmail,
-                amount: itemWinner.winningBid,
+            const auctionRecord: DonationRecord = {
+              id: `auc-${aucId}`,
+              tiltifyId: aucId,
+              eventType: "auction_ended",
+              donorName: itemWinner.winnerName,
+              donorEmail: itemWinner.winnerEmail,
+              amount: itemWinner.winningBid,
+              currency: itemWinner.currency,
+              auction: {
+                auctionId: itemWinner.itemId,
+                itemTitle: itemWinner.itemTitle,
+                itemDescription: itemWinner.itemDescription,
+                winningBid: itemWinner.winningBid,
                 currency: itemWinner.currency,
-                auction: {
-                  auctionId: itemWinner.itemId,
-                  itemTitle: itemWinner.itemTitle,
-                  itemDescription: itemWinner.itemDescription,
-                  winningBid: itemWinner.winningBid,
-                  currency: itemWinner.currency,
-                  winnerName: itemWinner.winnerName,
-                  winnerEmail: itemWinner.winnerEmail,
-                  endedAt: itemWinner.endedAt,
-                  prizeType: itemWinner.prizeType || "physical",
-                  prizeDetails: itemWinner.itemTitle,
-                  shippingAddress: itemWinner.shippingAddress,
-                  specialInstructions: itemWinner.specialInstructions,
-                  shippingStatus: "pending",
-                  rawItem: itemWinner.rawPayload,
-                },
-                campaignName: effectiveCampaignName,
-                campaignId: campaignId,
-                totalRaised: campaignSummary?.totalRaised,
-                targetGoal: campaignSummary?.targetGoal,
-                receivedAt: itemWinner.endedAt || new Date().toISOString(),
-                source: "poll",
-                discordStatus: isInitialHistorySync ? "sent" : "pending",
-                rawPayload: itemWinner.rawPayload,
-              };
+                winnerName: itemWinner.winnerName,
+                winnerEmail: itemWinner.winnerEmail,
+                endedAt: itemWinner.endedAt,
+                prizeType: itemWinner.prizeType || "physical",
+                prizeDetails: itemWinner.itemTitle,
+                shippingAddress: itemWinner.shippingAddress,
+                specialInstructions: itemWinner.specialInstructions,
+                shippingStatus: "pending",
+                rawItem: itemWinner.rawPayload,
+              },
+              campaignName: effectiveCampaignName,
+              campaignId: campaignId,
+              totalRaised: campaignSummary?.totalRaised,
+              targetGoal: campaignSummary?.targetGoal,
+              receivedAt: itemWinner.endedAt || new Date().toISOString(),
+              source: "poll",
+              discordStatus: "pending",
+              rawPayload: itemWinner.rawPayload,
+            };
 
-              if (!isInitialHistorySync) {
-                const dispatchResult = await dispatchDiscordAlert(auctionRecord, state.discord);
-                auctionRecord.discordStatus = dispatchResult.success ? "sent" : "failed";
-                auctionRecord.discordError = dispatchResult.error;
-                newCount++;
-              }
-
-              state.donations.unshift(auctionRecord);
-              state.botStatus.totalAuctionsProcessed = (state.botStatus.totalAuctionsProcessed || 0) + 1;
-              state.botStatus.lastDonationTimestamp = auctionRecord.receivedAt;
+            // Remove the generic placeholder if one existed so it is replaced with rich auction winner data
+            if (genericIndex !== -1) {
+              state.donations.splice(genericIndex, 1);
             }
+
+            // Dispatch the rich auction winner card with prize and shipping info!
+            const dispatchResult = await dispatchDiscordAlert(auctionRecord, state.discord);
+            auctionRecord.discordStatus = dispatchResult.success ? "sent" : "failed";
+            auctionRecord.discordError = dispatchResult.error;
+            newCount++;
+
+            state.seenAuctionIds.add(aucId);
+            state.donations.unshift(auctionRecord);
+            state.botStatus.totalAuctionsProcessed = (state.botStatus.totalAuctionsProcessed || 0) + 1;
+            state.botStatus.lastDonationTimestamp = auctionRecord.receivedAt;
           } else {
-            // Update existing auction record if winningBid changed or was previously recorded as $2 starting bid!
-            const existing = state.donations.find((d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId);
-            if (existing && itemWinner.winningBid > 0 && (existing.amount !== itemWinner.winningBid || existing.amount <= 2.0)) {
+            // Already recorded as auction: update details and send if not sent yet
+            const existing = state.donations[existingAuctionIndex];
+            if (itemWinner.winningBid > 0 && (existing.amount !== itemWinner.winningBid || existing.amount <= 2.0)) {
               existing.amount = itemWinner.winningBid;
               if (existing.auction) {
                 existing.auction.winningBid = itemWinner.winningBid;
               }
+            }
+            if (itemWinner.shippingAddress && !existing.auction?.shippingAddress) {
+              if (existing.auction) existing.auction.shippingAddress = itemWinner.shippingAddress;
+            }
+            if (itemWinner.winnerEmail && !existing.auction?.winnerEmail) {
+              if (existing.auction) existing.auction.winnerEmail = itemWinner.winnerEmail;
+            }
+            if (existing.discordStatus !== "sent") {
+              const dispatchResult = await dispatchDiscordAlert(existing, state.discord);
+              existing.discordStatus = dispatchResult.success ? "sent" : "failed";
+              existing.discordError = dispatchResult.error;
+              if (dispatchResult.success) newCount++;
             }
           }
         }
@@ -3428,6 +3455,16 @@ app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Re
         );
 
         if (!existing) {
+          // Check if a generic donation was logged previously from /donations polling
+          const genericIndex = state.donations.findIndex(
+            (d) => !d.auction && d.eventType !== "auction_ended" &&
+              ((d.donorName && d.donorName.toLowerCase() === auctionInfo.winnerName.toLowerCase()) ||
+               (d.amount <= 2.01 && (auctionInfo.winningBid <= 2.01 || Math.abs(d.amount - auctionInfo.winningBid) < 0.01)))
+          );
+          if (genericIndex !== -1) {
+            state.donations.splice(genericIndex, 1);
+          }
+
           const auctionRecord: DonationRecord = {
             id: `auc-${aucId}`,
             tiltifyId: rawAuc.itemId || aucId,
@@ -3465,9 +3502,17 @@ app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Re
             (state.botStatus.totalAuctionsProcessed || 0) + 1;
           importedCount++;
         } else {
-          // Enrich existing record with updated prize and shipping details
+          // Enrich existing record with updated prize, winner email, and shipping details
           if (!existing.auction?.shippingAddress && auctionInfo.shippingAddress) {
             existing.auction = { ...existing.auction, ...auctionInfo };
+          }
+          if (auctionInfo.winnerEmail && !existing.auction?.winnerEmail) {
+            if (existing.auction) existing.auction.winnerEmail = auctionInfo.winnerEmail;
+            existing.donorEmail = auctionInfo.winnerEmail;
+          }
+          if (auctionInfo.winnerName && existing.auction?.winnerName !== auctionInfo.winnerName) {
+            if (existing.auction) existing.auction.winnerName = auctionInfo.winnerName;
+            existing.donorName = auctionInfo.winnerName;
           }
           // CRITICAL: Update amount if existing had an old/lower/starting bid amount ($2 vs winning bid)
           if (auctionInfo.winningBid > 0 && (existing.amount !== auctionInfo.winningBid || existing.amount <= 2.0)) {
@@ -3476,7 +3521,7 @@ app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Re
               existing.auction.winningBid = auctionInfo.winningBid;
             }
           }
-          if (sendToDiscord && existing.discordStatus !== "sent") {
+          if (sendToDiscord && (existing.discordStatus !== "sent" || req.body.forceResend)) {
             const dispatchResult = await dispatchDiscordAlert(existing, state.discord);
             existing.discordStatus = dispatchResult.success ? "sent" : "failed";
             existing.discordError = dispatchResult.error;

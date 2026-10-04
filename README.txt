@@ -240,8 +240,38 @@ PART II: DISCORD DONATION ALERT BOT (Render 24/7 Hosting)
 ================================================================================
 
 --------------------------------------------------------------------------------
-8. STEP 1: CREATE A DISCORD WEBHOOK
+8. DISCORD CONNECTION: WEBHOOK URL VS. BOT TOKEN (WHICH TO CHOOSE?)
 --------------------------------------------------------------------------------
+Donify supports two ways to post alerts to Discord. Choose whichever fits you best:
+
+* OPTION A: WEBHOOK URL (Fastest, zero-friction — Recommended for most users)
+  - Setup Time: 10 seconds. No developer accounts or bots to configure.
+  - Channel Scope: Permanently locked to 1 channel. To post to a separate 
+    #auctions channel, you simply create a 2nd webhook for that channel.
+  - Customization: Avatar and bot display name can be changed anytime in your 
+    dashboard without touching Discord settings.
+  - How to get it: Right-click channel -> Edit Channel -> Integrations -> 
+    Webhooks -> New Webhook -> Copy Webhook URL.
+
+* OPTION B: BOT TOKEN (Server-wide presence & multi-channel routing)
+  - Setup Time: ~5 minutes via Discord Developer Portal (discord.com/developers).
+  - Channel Scope: Can post to ANY channel in your server using Channel IDs.
+  - Multi-Channel: Uses 1 bot token server-wide; route to separate channels by 
+    just pasting the Channel ID without creating extra webhooks.
+  - Member Presence: Appears in your Discord member list with a [BOT] tag.
+  - How to get it: Create Application at discord.com/developers/applications -> 
+    Bot tab -> Reset Token -> Invite bot to server with Send Messages permissions -> 
+    Right-click channel and Copy Channel ID.
+
+SUMMARY:
+- If you want the fastest setup with zero maintenance, use Webhooks!
+- If you already run a custom bot or want one bot routing to multiple channels 
+  via Channel IDs, use Bot Token mode!
+
+--------------------------------------------------------------------------------
+9. STEP 1: CREATE A DISCORD WEBHOOK (OR GET BOT TOKEN)
+--------------------------------------------------------------------------------
+For Webhook (Option A):
 1. Open Discord on desktop or browser.
 2. Go to the channel where you want donation alerts to appear.
 3. Click the Gear icon (Edit Channel) next to the channel name.
@@ -251,7 +281,7 @@ PART II: DISCORD DONATION ALERT BOT (Render 24/7 Hosting)
    (Looks like: https://discord.com/api/webhooks/123456789/abcdefgh...)
 
 --------------------------------------------------------------------------------
-9. STEP 2: DEPLOY TO RENDER FOR FREE
+10. STEP 2: DEPLOY TO RENDER FOR FREE
 --------------------------------------------------------------------------------
 1. Go to https://dashboard.render.com and sign in.
 2. Click "+ New" -> "Web Service".
@@ -266,27 +296,27 @@ PART II: DISCORD DONATION ALERT BOT (Render 24/7 Hosting)
 5. Do NOT click Deploy yet — proceed to Step 10 to add your environment variables!
 
 --------------------------------------------------------------------------------
-10. STEP 3: CONFIGURE ENVIRONMENT SECRETS IN RENDER
+11. STEP 3: CONFIGURE ENVIRONMENT SECRETS IN RENDER
 --------------------------------------------------------------------------------
 In your Render Web Service settings, add these Environment Variables:
 
    KEY                       VALUE
    -----------------------------------------------------------------------------
-   DISCORD_WEBHOOK_URL       https://discord.com/api/webhooks/1234... (from Step 8)
+   DISCORD_WEBHOOK_URL       https://discord.com/api/webhooks/1234... (from Step 9)
    ADMIN_PASSWORD            YourSecretPassword (locks web dashboard)
    TILTIFY_CAMPAIGN_ID       Your Tiltify Campaign ID
 
 Click "Save Changes" / "Create Web Service". Render will securely deploy.
 
 --------------------------------------------------------------------------------
-11. STEP 4: ADMIN PASSCODE PROTECTION
+12. STEP 4: ADMIN PASSCODE PROTECTION
 --------------------------------------------------------------------------------
 Setting ADMIN_PASSWORD locks your web dashboard settings from unauthorized 
 visitors. Visitors see a clean lock screen. Tiltify webhooks and status endpoints 
 remain completely functional in the background.
 
 --------------------------------------------------------------------------------
-12. STEP 5: CONNECT TILTIFY WEBHOOKS
+13. STEP 5: CONNECT TILTIFY WEBHOOKS
 --------------------------------------------------------------------------------
 1. Open your Render bot dashboard URL (e.g. https://donify-bot.onrender.com).
 2. Copy your Webhook Endpoint URL:
@@ -299,7 +329,7 @@ remain completely functional in the background.
    - Save.
 
 --------------------------------------------------------------------------------
-13. STEP 6: KEEP YOUR BOT AWAKE 24/7 (FREE PING)
+14. STEP 6: KEEP YOUR BOT AWAKE 24/7 (FREE PING)
 --------------------------------------------------------------------------------
 Render puts inactive free apps to sleep after 15 minutes. Set up a free 10-minute 
 ping to keep it awake 24/7:
@@ -314,7 +344,7 @@ ping to keep it awake 24/7:
 3. Click "Create" and test it. You should see "200 OK".
 
 --------------------------------------------------------------------------------
-14. STANDALONE DISCORD CHANNELS (AUCTIONS VS REGULAR DONATIONS)
+15. STANDALONE DISCORD CHANNELS (AUCTIONS VS REGULAR DONATIONS)
 --------------------------------------------------------------------------------
 If you want to keep regular donation alerts and auction house wins in separate 
 Discord channels (e.g. #donations and #auctions):
@@ -343,7 +373,7 @@ Discord channels (e.g. #donations and #auctions):
    - DISCORD_AUCTION_CHANNEL_ID=123456789012345678
 
 --------------------------------------------------------------------------------
-15. TESTING YOUR ALERTS & TROUBLESHOOTING FAQ
+16. TESTING YOUR ALERTS & TROUBLESHOOTING FAQ
 --------------------------------------------------------------------------------
 * How to Test:
   Open your Render bot dashboard and click "Test Alert" in the top bar. You 
