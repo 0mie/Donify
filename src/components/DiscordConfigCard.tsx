@@ -23,6 +23,8 @@ import {
   BarChart3,
   Info,
   Link2,
+  Users,
+  Lock,
 } from 'lucide-react';
 
 interface DiscordConfigCardProps {
@@ -1974,6 +1976,133 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                       />
                     </div>
 
+                    {/* Winner Privacy & Public Channel Safety Card */}
+                    <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                          <span className="text-xs font-semibold text-neutral-200">Winner Privacy &amp; Channel Safety</span>
+                        </div>
+                        <span className="text-[10px] bg-emerald-950/80 text-emerald-300 px-2 py-0.5 rounded border border-emerald-800/50 font-medium">
+                          Anti-Doxxing Protection
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 leading-relaxed">
+                        If your bot posts in a <strong>public channel</strong> (like #announcements, #general, or #donations), anyone in your server could see or click to view a winning bidder's home street address. Choose how private shipping details should be handled in Discord:
+                      </p>
+
+                      <div className="space-y-2 pt-1 text-xs">
+                        <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          (localConfig.auctionShippingPrivacy || 'public_safe') === 'public_safe'
+                            ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-200'
+                            : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="auctionShippingPrivacy"
+                            value="public_safe"
+                            checked={(localConfig.auctionShippingPrivacy || 'public_safe') === 'public_safe'}
+                            onChange={() => handleInputChange('auctionShippingPrivacy', 'public_safe')}
+                            className="mt-0.5 text-emerald-500 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="font-semibold block text-emerald-300">🛡️ Auto-Hide Shipping in Public Channel (Safe Mode)</span>
+                            <span className="text-[11px] text-neutral-400 block mt-0.5 leading-snug">
+                              Celebrates the winner, item won, and winning bid publicly, but <strong>completely excludes</strong> physical home addresses and personal emails from Discord so anyone in the channel can view the post safely. Full fulfillment details are stored securely in your password-protected Donify Prize Shipping Center.
+                            </span>
+                          </div>
+                        </label>
+
+                        <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          localConfig.auctionShippingPrivacy === 'spoiler'
+                            ? 'bg-indigo-950/30 border-indigo-500/50 text-indigo-200'
+                            : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="auctionShippingPrivacy"
+                            value="spoiler"
+                            checked={localConfig.auctionShippingPrivacy === 'spoiler'}
+                            onChange={() => handleInputChange('auctionShippingPrivacy', 'spoiler')}
+                            className="mt-0.5 text-indigo-500 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <span className="font-semibold block text-indigo-300">👁️ Mask with Discord Spoiler Tags (||hidden click-to-reveal||)</span>
+                            <span className="text-[11px] text-neutral-400 block mt-0.5 leading-snug">
+                              Sends the winning bidder's email and shipping address hidden behind Discord spoiler bars (<code>||123 Main St...||</code>). Members must explicitly click the spoiler block to reveal the text.
+                            </span>
+                          </div>
+                        </label>
+
+                        <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          localConfig.auctionShippingPrivacy === 'full'
+                            ? 'bg-amber-950/30 border-amber-500/50 text-amber-200'
+                            : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="auctionShippingPrivacy"
+                            value="full"
+                            checked={localConfig.auctionShippingPrivacy === 'full'}
+                            onChange={() => handleInputChange('auctionShippingPrivacy', 'full')}
+                            className="mt-0.5 text-amber-500 focus:ring-amber-500"
+                          />
+                          <div>
+                            <span className="font-semibold block text-amber-300">📋 Full Display (Unmasked - Private Staff Channel Only)</span>
+                            <span className="text-[11px] text-neutral-400 block mt-0.5 leading-snug">
+                              Shows full address in plain code blocks. Only recommended if auction alerts are routed to a locked, private moderator/staff channel.
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Specific Role / Staff Member Mention on Auction Win */}
+                    <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Staff / Fulfillment Role Mention on Auction End</span>
+                        </label>
+                        <span className="text-[10px] text-neutral-400">Optional</span>
+                      </div>
+                      <p className="text-[11px] text-neutral-400">
+                        Alert a specific role (like your merch fulfillment crew or mods) whenever an auction item closes and needs shipping.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs">
+                        <div>
+                          <label className="text-neutral-400 block mb-1">Mention Type</label>
+                          <select
+                            value={localConfig.auctionMentionType || 'none'}
+                            onChange={(e) => handleInputChange('auctionMentionType', e.target.value)}
+                            className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          >
+                            <option value="none">No Mention (Embed Only)</option>
+                            <option value="role">Specific Role (Enter Role ID)</option>
+                            <option value="here">@here (Online Members)</option>
+                            <option value="everyone">@everyone (Entire Channel)</option>
+                          </select>
+                        </div>
+
+                        {localConfig.auctionMentionType === 'role' && (
+                          <div>
+                            <label className="text-neutral-400 block mb-1">Discord Role ID or Name</label>
+                            <input
+                              type="text"
+                              value={localConfig.auctionMentionRoleId || ''}
+                              onChange={(e) => handleInputChange('auctionMentionRoleId', e.target.value)}
+                              placeholder="e.g. 123456789012345678"
+                              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                            <span className="text-[10px] text-neutral-500 mt-1 block">
+                              Right-click role in Discord Server Settings ➔ Copy Role ID.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     {/* Standalone Channel Routing Section */}
                     <div className="pt-3 border-t border-neutral-800/80 space-y-3">
                       <div>
@@ -2038,6 +2167,26 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                               </p>
                             </div>
                           )}
+
+                          {/* Dual Posting Mode */}
+                          <div className="pt-2 border-t border-neutral-800">
+                            <label className="flex items-start gap-2.5 cursor-pointer text-neutral-200 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={localConfig.dualPostAuctions === true}
+                                onChange={(e) => handleInputChange('dualPostAuctions', e.target.checked)}
+                                className="mt-0.5 rounded bg-neutral-900 border-neutral-800 text-amber-500 focus:ring-amber-500 w-4 h-4"
+                              />
+                              <div>
+                                <span className="font-semibold text-amber-300 block">
+                                  📢 Dual Posting: Also post public winner announcement to main channel
+                                </span>
+                                <span className="text-[11px] text-neutral-400 block mt-0.5 leading-snug">
+                                  Posts a public celebratory announcement to your main donations channel with shipping info <strong>automatically hidden</strong> for member safety, while simultaneously sending the complete prize fulfillment card (with full shipping details &amp; role mention) to this dedicated staff channel!
+                                </span>
+                              </div>
+                            </label>
+                          </div>
 
                           <div className="pt-2 flex items-center gap-3">
                             <button

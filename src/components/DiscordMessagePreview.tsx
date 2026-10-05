@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DiscordConfig, ClaimedReward, AuctionWinnerInfo } from '../types';
+import { ShieldCheck } from 'lucide-react';
 
 interface DiscordMessagePreviewProps {
   config: DiscordConfig;
@@ -71,19 +72,32 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
   };
 
   let mentionText = "";
-  if (config.mentionType === "everyone") {
-    mentionText = "@everyone";
-  } else if (config.mentionType === "here") {
-    mentionText = "@here";
-  } else if (config.mentionType === "role" && config.mentionRoleId) {
-    const clean = config.mentionRoleId.replace(/[<@&>]/g, "").trim();
-    mentionText = `@Role(${clean || config.mentionRoleId})`;
-  } else if (config.mentionType === "user" && config.mentionUserId) {
-    const clean = config.mentionUserId.replace(/[<@!>]/g, "").trim();
-    mentionText = `@User(${clean || config.mentionUserId})`;
-  }
-
   const isAuction = previewMode === 'auction';
+
+  if (isAuction) {
+    if (config.auctionMentionType === "role" && config.auctionMentionRoleId) {
+      const clean = config.auctionMentionRoleId.replace(/[<@&>]/g, "").trim();
+      mentionText = `@Role(${clean || config.auctionMentionRoleId})`;
+    } else if (config.auctionMentionType === "here") {
+      mentionText = "@here";
+    } else if (config.auctionMentionType === "everyone") {
+      mentionText = "@everyone";
+    } else {
+      mentionText = "";
+    }
+  } else {
+    if (config.mentionType === "everyone") {
+      mentionText = "@everyone";
+    } else if (config.mentionType === "here") {
+      mentionText = "@here";
+    } else if (config.mentionType === "role" && config.mentionRoleId) {
+      const clean = config.mentionRoleId.replace(/[<@&>]/g, "").trim();
+      mentionText = `@Role(${clean || config.mentionRoleId})`;
+    } else if (config.mentionType === "user" && config.mentionUserId) {
+      const clean = config.mentionUserId.replace(/[<@!>]/g, "").trim();
+      mentionText = `@User(${clean || config.mentionUserId})`;
+    }
+  }
 
   const formattedAmount = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -295,48 +309,90 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                           <span className="text-[#949ba4]">Winner: </span>
                           <span className="text-white font-semibold">{sampleAuction.winnerName}</span>
                         </div>
-                        <div>
-                          <span className="text-[#949ba4]">Send To Email: </span>
-                          <span className="font-bold text-teal-300 font-mono text-xs bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800/60 ml-1">
-                            {sampleAuction.winnerEmail || 'Not provided'}
-                          </span>
-                        </div>
+                        {(config.auctionShippingPrivacy || 'public_safe') === 'public_safe' ? (
+                          <div className="text-[11px] text-emerald-400 bg-emerald-950/40 p-2 rounded border border-emerald-800/40 flex items-start gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-semibold block">Public Channel Safe</span>
+                              <span className="text-[10px] text-neutral-400">Winner email is hidden from public channel. Staff can access details in Donify Prize Shipping Center.</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="text-[#949ba4]">Send To Email: </span>
+                            <span className="font-bold text-teal-300 font-mono text-xs bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800/60 ml-1">
+                              {sampleAuction.winnerEmail || 'Not provided'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       /* Physical or Both */
                       <>
-                        <div className="bg-[#1e1f22] p-2 rounded">
-                          <div className="text-[11px] text-[#949ba4] font-semibold mb-0.5">Winner Contact:</div>
-                          <div className="text-white font-medium">{sampleAuction.winnerName}</div>
-                          {sampleAuction.winnerEmail && (
-                            <div className="text-indigo-300 font-mono text-[11px] mt-0.5">
-                              📧 {sampleAuction.winnerEmail}
+                        {(config.auctionShippingPrivacy || 'public_safe') === 'public_safe' ? (
+                          <div className="bg-[#1e1f22] p-2.5 rounded-lg border border-emerald-500/30 text-xs space-y-1">
+                            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              <span>Public Channel Safe Mode</span>
                             </div>
-                          )}
-                        </div>
-
-                        {/* Physical Prize Shipping Address */}
-                        {sampleAuction.shippingAddress && (
-                          <div>
-                            <div className="text-[11px] text-[#949ba4] mb-1 font-semibold flex items-center justify-between">
-                              <span>📦 Physical Prize Shipping Address:</span>
-                              {config.spoilerDeliveryInfo && (
-                                <span className="text-[10px] text-amber-400/80">Spoiler protected</span>
+                            <div className="text-[#dbdee1] text-[11px]">
+                              Recipient: <span className="font-semibold text-white">{sampleAuction.winnerName}</span>
+                            </div>
+                            <div className="text-[11px] text-[#949ba4] leading-relaxed">
+                              🔒 <em>Winner shipping address &amp; email are hidden from public Discord channels. Full fulfillment details are stored safely in Donify Prize Shipping Center.</em>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="bg-[#1e1f22] p-2 rounded">
+                              <div className="text-[11px] text-[#949ba4] font-semibold mb-0.5">Winner Contact:</div>
+                              <div className="text-white font-medium">{sampleAuction.winnerName}</div>
+                              {sampleAuction.winnerEmail && (
+                                <div className="text-indigo-300 font-mono text-[11px] mt-0.5">
+                                  📧 {sampleAuction.winnerEmail}
+                                </div>
                               )}
                             </div>
 
-                            {config.spoilerDeliveryInfo ? (
-                              <div
-                                onClick={() => setSpoilerRevealed(!spoilerRevealed)}
-                                className={`cursor-pointer px-2 py-1.5 rounded text-xs transition-colors font-mono ${
-                                  spoilerRevealed
-                                    ? 'bg-[#1e1f22] text-[#dbdee1] border border-neutral-700'
-                                    : 'bg-[#1e1f22] text-[#1e1f22] hover:text-[#4e5058] select-none border border-neutral-800'
-                                }`}
-                                title={spoilerRevealed ? 'Click to hide' : 'Click to reveal spoiler'}
-                              >
-                                {spoilerRevealed ? (
-                                  <div>
+                            {/* Physical Prize Shipping Address */}
+                            {sampleAuction.shippingAddress && (
+                              <div>
+                                <div className="text-[11px] text-[#949ba4] mb-1 font-semibold flex items-center justify-between">
+                                  <span>📦 Physical Prize Shipping Address:</span>
+                                  {config.auctionShippingPrivacy === 'spoiler' && (
+                                    <span className="text-[10px] text-amber-400/80">Spoiler protected</span>
+                                  )}
+                                </div>
+
+                                {config.auctionShippingPrivacy === 'spoiler' ? (
+                                  <div
+                                    onClick={() => setSpoilerRevealed(!spoilerRevealed)}
+                                    className={`cursor-pointer px-2 py-1.5 rounded text-xs transition-colors font-mono ${
+                                      spoilerRevealed
+                                        ? 'bg-[#1e1f22] text-[#dbdee1] border border-neutral-700'
+                                        : 'bg-[#1e1f22] text-[#1e1f22] hover:text-[#4e5058] select-none border border-neutral-800'
+                                    }`}
+                                    title={spoilerRevealed ? 'Click to hide' : 'Click to reveal spoiler'}
+                                  >
+                                    {spoilerRevealed ? (
+                                      <div>
+                                        <div>{sampleAuction.shippingAddress.recipientName}</div>
+                                        <div>{sampleAuction.shippingAddress.addressLine1}</div>
+                                        {sampleAuction.shippingAddress.addressLine2 && (
+                                          <div>{sampleAuction.shippingAddress.addressLine2}</div>
+                                        )}
+                                        <div>
+                                          {sampleAuction.shippingAddress.city}, {sampleAuction.shippingAddress.region}{' '}
+                                          {sampleAuction.shippingAddress.postalCode}
+                                        </div>
+                                        <div>{sampleAuction.shippingAddress.country}</div>
+                                      </div>
+                                    ) : (
+                                      '██████████████████████████████████ (Click to reveal shipping address)'
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="bg-[#1e1f22] p-2 rounded font-mono text-[11px] text-neutral-300">
                                     <div>{sampleAuction.shippingAddress.recipientName}</div>
                                     <div>{sampleAuction.shippingAddress.addressLine1}</div>
                                     {sampleAuction.shippingAddress.addressLine2 && (
@@ -348,32 +404,17 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                                     </div>
                                     <div>{sampleAuction.shippingAddress.country}</div>
                                   </div>
-                                ) : (
-                                  '██████████████████████████████████ (Click to reveal shipping address)'
                                 )}
-                              </div>
-                            ) : (
-                              <div className="bg-[#1e1f22] p-2 rounded font-mono text-[11px] text-neutral-300">
-                                <div>{sampleAuction.shippingAddress.recipientName}</div>
-                                <div>{sampleAuction.shippingAddress.addressLine1}</div>
-                                {sampleAuction.shippingAddress.addressLine2 && (
-                                  <div>{sampleAuction.shippingAddress.addressLine2}</div>
-                                )}
-                                <div>
-                                  {sampleAuction.shippingAddress.city}, {sampleAuction.shippingAddress.region}{' '}
-                                  {sampleAuction.shippingAddress.postalCode}
-                                </div>
-                                <div>{sampleAuction.shippingAddress.country}</div>
                               </div>
                             )}
-                          </div>
-                        )}
 
-                        {sampleAuction.prizeType === 'both' && sampleAuction.winnerEmail && (
-                          <div className="bg-teal-950/40 border border-teal-800/40 p-2 rounded text-[11px] text-teal-200">
-                            <strong>📧 Digital Redemption Pass:</strong> Send digital voucher or keys to{' '}
-                            <span className="font-bold text-teal-300 underline font-mono">{sampleAuction.winnerEmail}</span>
-                          </div>
+                            {sampleAuction.prizeType === 'both' && sampleAuction.winnerEmail && (
+                              <div className="bg-teal-950/40 border border-teal-800/40 p-2 rounded text-[11px] text-teal-200">
+                                <strong>📧 Digital Redemption Pass:</strong> Send digital voucher or keys to{' '}
+                                <span className="font-bold text-teal-300 underline font-mono">{sampleAuction.winnerEmail}</span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </>
                     )}

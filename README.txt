@@ -385,10 +385,37 @@ Discord channels (e.g. #donations and #auctions):
      Check "Route Auction House Alerts to a Standalone Channel" and paste the 
      Auction Channel ID.
 
-3. OPTIONAL ENVIRONMENT VARIABLES (Render):
+3. DUAL-CHANNEL POSTING (Public Celebration + Private Staff Fulfillment):
+   - Check "Dual Posting: Also post public winner announcement to main channel"
+     (or set DISCORD_DUAL_POST_AUCTIONS=true).
+   - Posts a public celebratory announcement to your main donations channel with 
+     donor shipping addresses & emails AUTOMATICALLY HIDDEN for privacy, while 
+     simultaneously delivering the complete prize fulfillment card (with full/spoiler 
+     address details & staff role mentions) to your dedicated staff channel!
+
+4. AUCTION SHIPPING PRIVACY MODES:
+   - "Public Safe (Hide Address & Email)": Hides physical street address & contact 
+     email completely from public channels (staff view them in Prize Shipping Center).
+   - "Spoiler Tags (Click to Reveal)": Masks address and email behind Discord 
+     spoiler tags (||...||) for semi-private or member-only channels.
+   - "Full Fulfillment Details": Displays full address in formatted code blocks 
+     (recommended for locked/private staff fulfillment channels).
+
+5. 0-BID UNSOLD PROTECTION & SURVEY PLACEHOLDER FILTERING:
+   - Items that end with 0 bids are automatically recognized as unsold and will 
+     never trigger false winning alerts or add to campaign totals.
+   - Tiltify's placeholder notes ("winner info provided in winner survey") are 
+     intelligently filtered so genuine donor shipping addresses and prize details 
+     take precedence.
+
+6. OPTIONAL ENVIRONMENT VARIABLES (Render):
    - DISCORD_SEPARATE_AUCTION_CHANNEL=true
+   - DISCORD_DUAL_POST_AUCTIONS=true
+   - DISCORD_AUCTION_SHIPPING_PRIVACY=public_safe  (or 'spoiler' / 'full')
    - DISCORD_AUCTION_WEBHOOK_URL=https://discord.com/api/webhooks/...
    - DISCORD_AUCTION_CHANNEL_ID=123456789012345678
+   - DISCORD_AUCTION_MENTION_TYPE=role  (or 'here' / 'everyone' / 'none')
+   - DISCORD_AUCTION_MENTION_ROLE_ID=123456789012345678
 
 --------------------------------------------------------------------------------
 16. TESTING YOUR ALERTS & TROUBLESHOOTING FAQ

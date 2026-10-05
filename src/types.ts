@@ -87,6 +87,10 @@ export interface DiscordConfig {
   separateAuctionChannel?: boolean;
   auctionWebhookUrl?: string;
   auctionChannelId?: string;
+  auctionShippingPrivacy?: 'public_safe' | 'spoiler' | 'full';
+  dualPostAuctions?: boolean;
+  auctionMentionType?: 'none' | 'here' | 'everyone' | 'role';
+  auctionMentionRoleId?: string;
 }
 
 export interface TiltifyConfig {

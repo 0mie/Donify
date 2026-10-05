@@ -67,6 +67,9 @@ export default function App() {
     enableAuctionAlerts: true,
     auctionMessagePrefix: '🔨 **AUCTION ENDED!** An auction from the Tiltify Auction House has concluded.',
     onlyNotifyPrizeAuctions: false,
+    auctionShippingPrivacy: 'public_safe',
+    auctionMentionType: 'none',
+    auctionMentionRoleId: '',
   });
 
   const [tiltifyConfig, setTiltifyConfig] = useState<TiltifyConfig>({
@@ -161,7 +164,11 @@ export default function App() {
             if (b.separateAuctionChannel !== undefined && b.separateAuctionChannel !== serverDiscord.separateAuctionChannel) { mergedDiscord.separateAuctionChannel = b.separateAuctionChannel; needsRestoreSync = true; }
             if (b.auctionWebhookUrl && !serverDiscord.auctionWebhookUrl) { mergedDiscord.auctionWebhookUrl = b.auctionWebhookUrl; needsRestoreSync = true; }
             if (b.auctionChannelId && !serverDiscord.auctionChannelId) { mergedDiscord.auctionChannelId = b.auctionChannelId; needsRestoreSync = true; }
-            if (b.enableAuctionAlerts !== undefined && b.enableAuctionAlerts !== serverDiscord.enableAuctionAlerts) { mergedDiscord.enableAuctionAlerts = b.enableAuctionAlerts; needsRestoreSync = true; }
+            if (b.enableAuctionAlerts !== undefined && serverDiscord.enableAuctionAlerts === undefined) { mergedDiscord.enableAuctionAlerts = b.enableAuctionAlerts; needsRestoreSync = true; }
+            if (b.auctionShippingPrivacy && (!serverDiscord.auctionShippingPrivacy || serverDiscord.auctionShippingPrivacy === 'public_safe') && b.auctionShippingPrivacy !== 'public_safe') { mergedDiscord.auctionShippingPrivacy = b.auctionShippingPrivacy; needsRestoreSync = true; }
+            if (b.dualPostAuctions !== undefined && serverDiscord.dualPostAuctions === undefined) { mergedDiscord.dualPostAuctions = b.dualPostAuctions; needsRestoreSync = true; }
+            if (b.auctionMentionType && !serverDiscord.auctionMentionType) { mergedDiscord.auctionMentionType = b.auctionMentionType; needsRestoreSync = true; }
+            if (b.auctionMentionRoleId && !serverDiscord.auctionMentionRoleId) { mergedDiscord.auctionMentionRoleId = b.auctionMentionRoleId; needsRestoreSync = true; }
           }
 
           // Restore Tiltify custom fields
