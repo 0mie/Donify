@@ -359,6 +359,16 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
                   Simply use the <strong>Annual Campaign Rollover</strong> tool in the Tiltify tab of this dashboard. It smoothly switches the campaign slug while leaving your Discord webhook, custom embeds, and avatars 100% intact.
                 </p>
               </div>
+
+              {/* Separate Auction & Staff Channel Callout */}
+              <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 space-y-2 text-xs">
+                <span className="font-semibold text-white block">
+                  Need a Separate Channel for Auctions or Staff?
+                </span>
+                <p className="text-neutral-400 text-[11px] leading-relaxed">
+                  Discord webhooks are bound to <strong>one specific channel</strong>. If you want ended auctions or private winner shipping details posted to a private moderator channel (e.g. <code className="text-amber-300">#staff-auctions</code>), you will need a 2nd webhook. The <strong>Render Variables Wizard</strong> has a toggle for this that generates <code className="text-amber-300 font-mono">DISCORD_AUCTION_WEBHOOK_URL</code> and <code className="text-amber-300 font-mono">DISCORD_SEPARATE_AUCTION_CHANNEL=true</code> ready to copy!
+                </p>
+              </div>
             </div>
           )}
         </div>

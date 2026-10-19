@@ -786,6 +786,7 @@ export default function App() {
               onSave={handleSaveDiscord}
               onTest={handleTestDiscord}
               onCampaignNameChange={handleCampaignNameChange}
+              onOpenRenderSimplifier={() => setRenderSimplifierOpen(true)}
             />
           )}
 

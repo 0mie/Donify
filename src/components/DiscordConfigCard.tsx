@@ -33,6 +33,7 @@ interface DiscordConfigCardProps {
   onSave: (updated: Partial<DiscordConfig>, newCampaignName?: string) => Promise<void>;
   onTest: (overrideCampaignName?: string) => Promise<{ success: boolean; error?: string }>;
   onCampaignNameChange?: (name: string) => void;
+  onOpenRenderSimplifier?: () => void;
 }
 
 const COLOR_PRESETS = [
@@ -131,6 +132,7 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   onSave,
   onTest,
   onCampaignNameChange,
+  onOpenRenderSimplifier,
 }) => {
   const [localConfig, setLocalConfig] = useState<DiscordConfig>(config);
   const [localCampaignName, setLocalCampaignName] = useState<string>(
@@ -675,10 +677,23 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
               </div>
             </div>
 
-            {/* Destination Mode Badge */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-950 rounded-xl border border-neutral-800 text-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span className="font-medium text-neutral-300">Webhook Delivery</span>
+            <div className="flex items-center gap-2">
+              {onOpenRenderSimplifier && (
+                <button
+                  type="button"
+                  onClick={onOpenRenderSimplifier}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-800/80 text-indigo-300 rounded-xl text-xs font-medium transition-colors shadow-sm"
+                  title="Configure Render environment variables"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Render Variables Wizard</span>
+                </button>
+              )}
+              {/* Destination Mode Badge */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-950 rounded-xl border border-neutral-800 text-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span className="font-medium text-neutral-300">Webhook Delivery</span>
+              </div>
             </div>
           </div>
 
@@ -2144,6 +2159,24 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                               <p className="text-[11px] text-neutral-400 mt-1.5 leading-relaxed">
                                 💡 <strong>How Webhooks Work:</strong> Discord webhooks are bound to one specific channel. Create a new webhook inside your separate auction channel (e.g. <code>#auctions</code> or <code>#charity-auctions</code>) and paste its URL here. Standard campaign donations will continue posting to your primary channel webhook.
                               </p>
+
+                              {onOpenRenderSimplifier && (
+                                <div className="mt-2.5 p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
+                                  <div className="flex items-center gap-2 text-amber-200">
+                                    <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
+                                    <span>
+                                      <strong>Configuring Render?</strong> Because Discord webhooks only post to one channel, a separate auction channel needs its own webhook variable in Render (<code className="font-mono text-amber-300">DISCORD_AUCTION_WEBHOOK_URL</code>).
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={onOpenRenderSimplifier}
+                                    className="bg-amber-600 hover:bg-amber-500 text-white font-semibold px-3 py-1.5 rounded-lg text-xs shrink-0 transition-colors shadow-sm"
+                                  >
+                                    Open Render Wizard
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div>
