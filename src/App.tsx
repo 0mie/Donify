@@ -8,8 +8,9 @@ import { PrizeShippingCenter } from './components/PrizeShippingCenter';
 import { SetupGuideModal } from './components/SetupGuideModal';
 import { AdminLockModal } from './components/AdminLockModal';
 import { BackupModal } from './components/BackupModal';
+import { RenderSimplifierModal } from './components/RenderSimplifierModal';
 import { DiscordConfig, TiltifyConfig, DonationRecord, BotStatus, ClaimedReward, AuctionWinnerInfo } from './types';
-import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw, Package } from 'lucide-react';
+import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw, Package, Sparkles, HardDrive, Calendar } from 'lucide-react';
 
 const CONFIG_STORAGE_KEY = 'tiltify_bot_saved_config_v1';
 
@@ -34,6 +35,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'prizes' | 'feed' | 'simulator'>('discord');
   const [guideOpen, setGuideOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
+  const [renderSimplifierOpen, setRenderSimplifierOpen] = useState(false);
+  const [annualBannerDismissed, setAnnualBannerDismissed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const [discordConfig, setDiscordConfig] = useState<DiscordConfig>({
@@ -99,6 +102,9 @@ export default function App() {
   });
 
   const [donations, setDonations] = useState<DonationRecord[]>([]);
+  const [autoRestoredAlert, setAutoRestoredAlert] = useState(false);
+  const [saveReminder, setSaveReminder] = useState<string | null>(null);
+  const [copiedQuickConfig, setCopiedQuickConfig] = useState(false);
 
   // Security / Admin Passcode State
   const [hasPassword, setHasPassword] = useState(false);
@@ -200,6 +206,7 @@ export default function App() {
                 if (syncData.discord) serverDiscord = syncData.discord;
                 if (syncData.tiltify) serverTiltify = syncData.tiltify;
                 if (syncData.status) setStatus(syncData.status);
+                setAutoRestoredAlert(true);
               }
             } catch (syncErr) {
               console.warn('[App] Failed to auto-sync restored backup to server:', syncErr);
@@ -346,6 +353,7 @@ export default function App() {
     if (data.tiltify) setTiltifyConfig(data.tiltify);
     setStatus(data.status);
     saveLocalConfigBackup(data.discord, data.tiltify || tiltifyConfig);
+    setSaveReminder('Configuration saved and backed up in browser! Tip: To ensure Render permanently keeps these settings on future GitHub redeploys, 1-click copy DONIFY_CONFIG or download app-config.json.');
   };
 
   const handleCampaignNameChange = (name: string) => {
@@ -369,6 +377,7 @@ export default function App() {
     if (data.discord) setDiscordConfig(data.discord);
     setStatus(data.status);
     saveLocalConfigBackup(data.discord || discordConfig, data.tiltify);
+    setSaveReminder('Configuration saved and backed up in browser! Tip: To ensure Render permanently keeps these settings on future GitHub redeploys, 1-click copy DONIFY_CONFIG or download app-config.json.');
   };
 
   // Import configuration JSON
@@ -481,6 +490,12 @@ export default function App() {
   const totalSuccessful = donations.filter((d) => d.discordStatus === 'sent').length;
   const deliveryRate = donations.length > 0 ? Math.round((totalSuccessful / donations.length) * 100) : 100;
 
+  const currentCalendarYear = new Date().getFullYear();
+  const slugYearMatch = (tiltifyConfig.campaignId || tiltifyConfig.campaignName || '').match(/\b(202[0-9])\b/);
+  const detectedCampaignYear = slugYearMatch ? parseInt(slugYearMatch[1], 10) : null;
+  const isPastYearCampaign = Boolean(detectedCampaignYear && detectedCampaignYear < currentCalendarYear);
+  const shouldShowAnnualRolloverBanner = isPastYearCampaign && !annualBannerDismissed;
+
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col selection:bg-teal-500 selection:text-white">
       {/* Header Bar */}
@@ -489,6 +504,7 @@ export default function App() {
         hasPassword={hasPassword}
         onOpenGuide={() => setGuideOpen(true)}
         onOpenBackup={() => setBackupOpen(true)}
+        onOpenRenderSimplifier={() => setRenderSimplifierOpen(true)}
         onQuickTest={handleTestDiscord}
         onSetupPasscode={() => setAuthModalMode('setup')}
         onChangePasscode={() => setAuthModalMode('change')}
@@ -517,6 +533,119 @@ export default function App() {
             >
               <span>Set Passcode</span>
             </button>
+          </div>
+        )}
+
+        {/* Annual Campaign Rollover Reminder Banner */}
+        {shouldShowAnnualRolloverBanner && (
+          <div className="bg-gradient-to-r from-amber-950/50 via-neutral-900 to-neutral-950 border border-amber-800/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-fade-in shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-900/60 border border-amber-700/50 flex items-center justify-center shrink-0 text-amber-400">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-semibold text-amber-200 flex items-center gap-2">
+                  <span>Annual Campaign Rollover Notice</span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-mono">
+                    Prior Year: {detectedCampaignYear}
+                  </span>
+                </p>
+                <p className="text-amber-300/80 mt-0.5">
+                  Your active campaign slug (<code className="text-amber-200 font-mono">{tiltifyConfig.campaignId}</code>) is associated with {detectedCampaignYear}.
+                  If you are hosting a new {currentCalendarYear} event, switch to your new annual slug so donation alerts aren't missed!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setActiveTab('tiltify')}
+                className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold px-3 py-1.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Switch / Rollover Slug</span>
+              </button>
+              <button
+                onClick={() => setAnnualBannerDismissed(true)}
+                className="text-neutral-400 hover:text-white px-2 py-1 rounded text-xs transition-colors"
+                title="Dismiss reminder"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Auto-Restored Notification Banner */}
+        {autoRestoredAlert && (
+          <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center shrink-0 text-emerald-400">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-semibold text-emerald-200">Settings Auto-Restored Successfully!</p>
+                <p className="text-emerald-300/80 mt-0.5">
+                  Render's container restarted, but Donify automatically synchronized your saved configuration back to the server from your browser backup.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setBackupOpen(true)}
+                className="bg-emerald-800/80 hover:bg-emerald-700 text-white font-medium px-3 py-1.5 rounded-xl shrink-0 transition-colors text-xs"
+              >
+                View Backup Details
+              </button>
+              <button
+                onClick={() => setAutoRestoredAlert(false)}
+                className="text-neutral-400 hover:text-white px-2 py-1 rounded text-xs"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Save & Render Backup Reminder Banner */}
+        {saveReminder && (
+          <div className="bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-indigo-900/60 border border-indigo-700/50 flex items-center justify-center shrink-0 text-indigo-400">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-semibold text-indigo-200">Settings Saved &amp; Auto-Backed Up in Browser</p>
+                <p className="text-indigo-300/80 mt-0.5">
+                  Your browser will auto-restore these settings on redeploys. To make Render remember them permanently even on new devices, copy <code className="text-teal-300">DONIFY_CONFIG</code>.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  const payload = JSON.stringify({ discord: discordConfig, tiltify: tiltifyConfig });
+                  navigator.clipboard.writeText(payload);
+                  setCopiedQuickConfig(true);
+                  setTimeout(() => setCopiedQuickConfig(false), 2500);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-1.5 rounded-xl shrink-0 transition-colors shadow-sm flex items-center gap-1.5 text-xs"
+              >
+                {copiedQuickConfig ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" /> : <HardDrive className="w-3.5 h-3.5" />}
+                <span>{copiedQuickConfig ? 'Copied DONIFY_CONFIG!' : '1-Click Copy for Render'}</span>
+              </button>
+              <button
+                onClick={() => setBackupOpen(true)}
+                className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium px-2.5 py-1.5 rounded-xl shrink-0 transition-colors text-xs border border-neutral-700"
+              >
+                All Options
+              </button>
+              <button
+                onClick={() => setSaveReminder(null)}
+                className="text-neutral-400 hover:text-white px-2 py-1 rounded text-xs"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 
@@ -666,6 +795,7 @@ export default function App() {
               status={status}
               onSave={handleSaveTiltify}
               onPollNow={handlePollNow}
+              onOpenRenderSimplifier={() => setRenderSimplifierOpen(true)}
             />
           )}
 
@@ -696,6 +826,15 @@ export default function App() {
         isOpen={guideOpen}
         onClose={() => setGuideOpen(false)}
         webhookEndpoint={webhookEndpoint}
+        onOpenRenderSimplifier={() => setRenderSimplifierOpen(true)}
+      />
+
+      {/* Render Environment Variables Simplifier Modal */}
+      <RenderSimplifierModal
+        isOpen={renderSimplifierOpen}
+        onClose={() => setRenderSimplifierOpen(false)}
+        discordConfig={discordConfig}
+        tiltifyConfig={tiltifyConfig}
       />
 
       {/* Backup & Render Persistence Modal */}

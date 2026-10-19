@@ -184,30 +184,61 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           </div>
         </div>
 
-        {/* File Backup (Download / Upload) */}
-        <div className="border-t border-neutral-800 pt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="text-xs text-neutral-400 text-center sm:text-left">
-            Export a full JSON backup to your computer or import one anytime.
+        {/* File Backup (Download / Upload / Commit to Git) */}
+        <div className="border-t border-neutral-800 pt-4 space-y-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-neutral-400 text-center sm:text-left">
+              <span className="font-semibold text-neutral-200 block">Git Zero-Config Option (No Render Settings Needed):</span>
+              Commit <code className="text-teal-400 bg-neutral-950 px-1 py-0.5 rounded font-mono">data/app-config.json</code> directly to your GitHub repo so Render boots with your settings pre-baked.
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+              <button
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify({ adminPassword: '', discord: discordConfig, tiltify: tiltifyConfig }, null, 2)], {
+                    type: 'application/json',
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'app-config.json';
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-teal-900/60 hover:bg-teal-800/70 text-teal-200 border border-teal-700/60 px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
+                title="Save this file as data/app-config.json and push to GitHub"
+              >
+                <Download className="w-3.5 h-3.5 text-teal-400" />
+                <span>Save app-config.json for Git</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              onClick={handleDownload}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-2 rounded-xl text-xs font-medium border border-neutral-700 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5 text-teal-400" />
-              <span>Download .json</span>
-            </button>
-            <label className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-2 rounded-xl text-xs font-medium border border-neutral-700 cursor-pointer transition-colors">
-              <Upload className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{isImporting ? 'Importing...' : 'Import .json'}</span>
-              <input
-                type="file"
-                accept=".json,application/json"
-                onChange={handleFileUpload}
-                className="hidden"
-                disabled={isImporting}
-              />
-            </label>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-neutral-800/60">
+            <div className="text-xs text-neutral-400 text-center sm:text-left">
+              Export a standard dated backup or restore a previous configuration file.
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                onClick={handleDownload}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-2 rounded-xl text-xs font-medium border border-neutral-700 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-neutral-400" />
+                <span>Dated Backup (.json)</span>
+              </button>
+              <label className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-2 rounded-xl text-xs font-medium border border-neutral-700 cursor-pointer transition-colors">
+                <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                <span>{isImporting ? 'Importing...' : 'Import .json'}</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={isImporting}
+                />
+              </label>
+            </div>
           </div>
         </div>
 

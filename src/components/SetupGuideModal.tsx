@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { X, ExternalLink, Check, Copy, AlertCircle, Sparkles, MessageSquare, Webhook } from 'lucide-react';
+import { X, ExternalLink, Check, Copy, AlertCircle, Sparkles, MessageSquare, Webhook, Users } from 'lucide-react';
 
 interface SetupGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
   webhookEndpoint: string;
+  onOpenRenderSimplifier?: () => void;
 }
 
 export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
   isOpen,
   onClose,
   webhookEndpoint,
+  onOpenRenderSimplifier,
 }) => {
-  const [activeTab, setActiveTab] = useState<'discord' | 'tiltify'>('discord');
+  const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'teams' | 'render'>('discord');
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
@@ -33,8 +35,8 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Setup & Integration Guide</h2>
-              <p className="text-xs text-neutral-400">Connect Tiltify to Discord in minutes</p>
+              <h2 className="text-lg font-semibold text-white">Setup &amp; Integration Guide</h2>
+              <p className="text-xs text-neutral-400">Connect Tiltify to Discord and simplify Render deployment</p>
             </div>
           </div>
           <button
@@ -46,21 +48,21 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-neutral-800 bg-neutral-950/40 px-6">
+        <div className="flex border-b border-neutral-800 bg-neutral-950/40 px-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('discord')}
-            className={`flex items-center gap-2 py-3 px-4 font-medium text-sm border-b-2 transition-colors ${
+            className={`flex items-center gap-2 py-3 px-4 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'discord'
                 ? 'border-indigo-500 text-indigo-400'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            Discord Setup (Recommended: Webhook)
+            Discord Setup
           </button>
           <button
             onClick={() => setActiveTab('tiltify')}
-            className={`flex items-center gap-2 py-3 px-4 font-medium text-sm border-b-2 transition-colors ${
+            className={`flex items-center gap-2 py-3 px-4 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'tiltify'
                 ? 'border-teal-500 text-teal-400'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
@@ -68,6 +70,28 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
           >
             <Webhook className="w-4 h-4" />
             Tiltify Integration
+          </button>
+          <button
+            onClick={() => setActiveTab('teams')}
+            className={`flex items-center gap-2 py-3 px-4 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'teams'
+                ? 'border-amber-500 text-amber-400'
+                : 'border-transparent text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Team Campaigns
+          </button>
+          <button
+            onClick={() => setActiveTab('render')}
+            className={`flex items-center gap-2 py-3 px-4 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'render'
+                ? 'border-purple-500 text-purple-400'
+                : 'border-transparent text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            Render Variables (Simplified)
           </button>
         </div>
 
@@ -137,7 +161,7 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
                 </p>
               </div>
             </div>
-          ) : (
+          ) : activeTab === 'tiltify' ? (
             <div className="space-y-4">
               <div className="bg-teal-950/40 border border-teal-900/50 rounded-xl p-4">
                 <h3 className="font-semibold text-teal-300 mb-1">Option A: Tiltify Webhooks (Instant Push)</h3>
@@ -192,6 +216,148 @@ export const SetupGuideModal: React.FC<SetupGuideModalProps> = ({
               <div className="flex items-center gap-2 text-xs text-neutral-400 bg-neutral-950 p-3 rounded-lg border border-neutral-800">
                 <AlertCircle className="w-4 h-4 text-teal-400 shrink-0" />
                 <span>You can also use the built-in <strong>Donation Simulator</strong> tab to test Discord messages immediately without waiting for a real live donation.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-amber-950/40 border border-amber-900/50 rounded-xl p-4">
+                <h3 className="font-semibold text-amber-300 mb-1 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-amber-400" />
+                  <span>How Team Campaigns Work (No Separate API Keys Needed!)</span>
+                </h3>
+                <p className="text-xs text-amber-200/90 leading-relaxed">
+                  <strong>Do you need an API key or webhook for each team member?</strong> <strong>No!</strong> Tiltify groups all individual team member pages under your parent Team Campaign. You only need to set up Donify <strong>once</strong> for the entire team.
+                </p>
+              </div>
+
+              <div className="space-y-3 text-neutral-300">
+                <h4 className="font-semibold text-white">How to Set Up Team-Wide Alerts:</h4>
+
+                <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
+                  <div className="font-medium text-amber-300 text-xs">Method 1: Instant Webhook (Recommended)</div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-xs text-neutral-400">
+                    <li>Go to your <strong className="text-neutral-200">Team Campaign</strong> on Tiltify (the main parent event dashboard).</li>
+                    <li>Click <strong className="text-neutral-200">Webhooks</strong> &rarr; <strong className="text-neutral-200">Add Webhook</strong>.</li>
+                    <li>
+                      Paste your Donify Webhook Receiver URL:
+                      <div className="my-1.5 flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded p-1.5 font-mono text-[11px] text-teal-300">
+                        <span className="truncate flex-1">{webhookEndpoint}</span>
+                        <button
+                          onClick={() => copyToClipboard(webhookEndpoint)}
+                          className="bg-neutral-800 hover:bg-neutral-700 text-white px-2 py-0.5 rounded text-[10px]"
+                        >
+                          {copied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    </li>
+                    <li>
+                      Under event topics, subscribe to <code className="text-teal-400">donation_updated</code> with <strong className="text-neutral-200">"Include Child / Supporting Campaigns"</strong> (or <code className="text-amber-300">indirect</code> events).
+                    </li>
+                    <li>
+                      <strong className="text-emerald-400">That's it!</strong> Whenever any supporter donates to <em>any</em> team member on your team, Tiltify sends the event here. Donify automatically highlights the team member's name in Discord!
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 space-y-2">
+                  <div className="font-medium text-indigo-300 text-xs">Method 2: Background Poller</div>
+                  <p className="text-xs text-neutral-400 leading-relaxed">
+                    If you use the API Poller instead of webhooks, enter your <strong>parent Team Campaign ID or slug</strong> in the Tiltify tab. Tiltify's API automatically calculates your team's total amount raised and includes supporting donations.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-neutral-950 border border-neutral-800 rounded-xl text-xs space-y-1">
+                  <span className="font-semibold text-white block">What will the Discord alert show?</span>
+                  <p className="text-neutral-400 text-[11px] leading-relaxed">
+                    Donify formats team alerts to celebrate both your cause and your teammates:
+                  </p>
+                  <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800 font-mono text-[11px] text-neutral-300 space-y-0.5 mt-1">
+                    <div>🎉 <strong>New Donation: $50.00!</strong></div>
+                    <div>👤 <strong>Donor:</strong> Sam Sparks</div>
+                    <div>🎯 <strong>Campaign:</strong> Charity Marathon 2026 • 👤 <strong>Team Member:</strong> SarahStreamer</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'render' && (
+            <div className="space-y-4">
+              <div className="bg-purple-950/40 border border-purple-900/50 rounded-xl p-4">
+                <h3 className="font-semibold text-purple-300 mb-1 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <span>The Render Secret: You Only Need 2 Variables!</span>
+                </h3>
+                <p className="text-xs text-purple-200/80 leading-relaxed">
+                  Render's sample configuration mentions 20+ variables, but you do <strong>NOT</strong> need to configure all of them. All colors, avatar icons, templates, and prize options are already fully functional with built-in defaults or editable in this web app!
+                </p>
+              </div>
+
+              {/* The 2 Essential Variables */}
+              <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 space-y-3">
+                <span className="font-semibold text-white text-xs uppercase tracking-wider block">
+                  1. The 2 Essential Variables (Ready in 30 seconds):
+                </span>
+                <div className="space-y-2 text-xs">
+                  <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800">
+                    <div className="flex items-center justify-between">
+                      <code className="text-teal-300 font-mono font-bold">DISCORD_WEBHOOK_URL</code>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold uppercase">
+                        Must Have
+                      </span>
+                    </div>
+                    <p className="text-neutral-400 text-[11px] mt-1">
+                      Where the donation messages go. Created in Discord (Channel Settings &rarr; Integrations &rarr; Webhooks).
+                    </p>
+                  </div>
+
+                  <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800">
+                    <div className="flex items-center justify-between">
+                      <code className="text-teal-300 font-mono font-bold">TILTIFY_CAMPAIGN_ID</code>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold uppercase">
+                        Must Have
+                      </span>
+                    </div>
+                    <p className="text-neutral-400 text-[11px] mt-1">
+                      Your campaign ID or slug (e.g. <code className="text-neutral-200">gamingforher</code> or full URL).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 1-Click Bulk Pasting in Render */}
+              <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 space-y-2 text-xs">
+                <span className="font-semibold text-white block">
+                  How to Avoid Typing Variables One by One:
+                </span>
+                <p className="text-neutral-300 text-[11px] leading-relaxed">
+                  In Render, navigate to your Web Service &rarr; <strong>Environment</strong>. Look for the button that says <strong>"Add from .env"</strong>.
+                  You can paste all variables in one click instead of entering them separately!
+                </p>
+                {onOpenRenderSimplifier && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenRenderSimplifier();
+                    }}
+                    className="mt-2 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Open Render Variables Simplifier &amp; 1-Click Copy</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Annual Campaign Rollovers */}
+              <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 space-y-2 text-xs">
+                <span className="font-semibold text-white block">
+                  Annual Campaign Rollovers (No Disruption):
+                </span>
+                <p className="text-neutral-400 text-[11px] leading-relaxed">
+                  When you create a new campaign slug each year (e.g. <code className="text-teal-300">marathon-2027</code>), you do not need to rewrite your Render environment variables!
+                  Simply use the <strong>Annual Campaign Rollover</strong> tool in the Tiltify tab of this dashboard. It smoothly switches the campaign slug while leaving your Discord webhook, custom embeds, and avatars 100% intact.
+                </p>
               </div>
             </div>
           )}

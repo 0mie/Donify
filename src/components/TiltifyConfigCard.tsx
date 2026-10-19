@@ -23,6 +23,14 @@ import {
   Calendar,
   Filter,
   Info,
+  History,
+  ArrowRightLeft,
+  Plus,
+  Trash2,
+  ExternalLink,
+  ShieldCheck,
+  Activity,
+  Zap,
 } from 'lucide-react';
 
 interface TiltifyConfigCardProps {
@@ -30,6 +38,7 @@ interface TiltifyConfigCardProps {
   status: BotStatus;
   onSave: (updated: Partial<TiltifyConfig>) => Promise<void>;
   onPollNow: () => Promise<{ success: boolean; message: string; count: number }>;
+  onOpenRenderSimplifier?: () => void;
 }
 
 export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
@@ -37,6 +46,7 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
   status,
   onSave,
   onPollNow,
+  onOpenRenderSimplifier,
 }) => {
   const [localConfig, setLocalConfig] = useState<TiltifyConfig>(config);
   const [isSaving, setIsSaving] = useState(false);
@@ -54,6 +64,24 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
     totalRaised?: number;
     targetGoal?: number;
     currency?: string;
+  } | null>(null);
+
+  // Annual Campaign Rollover & Profiles State
+  const [showRolloverPanel, setShowRolloverPanel] = useState(false);
+  const [newCampaignSlug, setNewCampaignSlug] = useState('');
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newCampaignYear, setNewCampaignYear] = useState<number>(new Date().getFullYear());
+  const [isVerifyingRollover, setIsVerifyingRollover] = useState(false);
+
+  // Campaign Health Check State
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [healthStatus, setHealthStatus] = useState<{
+    success: boolean;
+    detectedYear?: number;
+    isPastYear?: boolean;
+    advice?: string;
+    campaign?: any;
+    discordSent?: boolean;
   } | null>(null);
 
   // Auction House Historical Pull States
@@ -228,6 +256,168 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
       });
     } finally {
       setIsFetchingCampaign(false);
+    }
+  };
+
+  const detectYearInSlug = (slug?: string) => {
+    if (!slug) return null;
+    const match = slug.match(/\b(202[0-9])\b/);
+    return match ? parseInt(match[1], 10) : null;
+  };
+
+  const currentCalendarYear = new Date().getFullYear();
+  const slugYear = detectYearInSlug(localConfig.campaignId || localConfig.campaignName);
+  const isPastYearDetected = Boolean(slugYear && slugYear < currentCalendarYear);
+
+  const getSavedProfiles = () => {
+    if (localConfig.savedCampaignProfiles && localConfig.savedCampaignProfiles.length > 0) {
+      return localConfig.savedCampaignProfiles;
+    }
+    const currentId = localConfig.campaignId || 'gamingforher';
+    const currentName = localConfig.campaignName || 'Charity Gaming Marathon';
+    return [
+      {
+        id: currentId,
+        name: currentName,
+        year: slugYear || currentCalendarYear,
+        isActive: true,
+        lastUsedAt: new Date().toISOString(),
+      },
+    ];
+  };
+
+  const handleSwitchCampaign = async (profile: any) => {
+    const updatedProfiles = getSavedProfiles().map((p) => ({
+      ...p,
+      isActive: p.id === profile.id,
+    }));
+    const updated: Partial<TiltifyConfig> = {
+      ...localConfig,
+      campaignId: profile.id,
+      campaignName: profile.name || localConfig.campaignName,
+      savedCampaignProfiles: updatedProfiles,
+    };
+    setLocalConfig(updated as TiltifyConfig);
+    setIsDirty(true);
+    await onSave(updated);
+    setFeedback({
+      type: 'success',
+      text: `Switched active campaign to "${profile.name || profile.id}"! Discord webhook, custom embeds, and avatars remain intact.`,
+    });
+  };
+
+  const handleRolloverSubmit = async () => {
+    const slug = newCampaignSlug.trim();
+    if (!slug) {
+      setFeedback({ type: 'error', text: 'Please enter a campaign slug or URL for the new campaign.' });
+      return;
+    }
+    setIsVerifyingRollover(true);
+    setFeedback(null);
+    try {
+      const token = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/tiltify/fetch-campaign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          campaignId: slug,
+          apiToken: localConfig.apiToken,
+        }),
+      });
+      const data = await res.json();
+      let verifiedName = newEventTitle.trim();
+      let totalRaised = 0;
+      let targetGoal = 0;
+
+      if (res.ok && data.success && data.campaign) {
+        verifiedName = verifiedName || data.campaign.name;
+        totalRaised = data.campaign.totalRaised || 0;
+        targetGoal = data.campaign.targetGoal || 0;
+      } else {
+        verifiedName = verifiedName || `Charity Campaign ${newCampaignYear}`;
+      }
+
+      const existingProfiles = getSavedProfiles().map((p) => ({ ...p, isActive: false }));
+      const newProfile = {
+        id: slug,
+        name: verifiedName,
+        year: newCampaignYear,
+        isActive: true,
+        lastUsedAt: new Date().toISOString(),
+        totalRaised,
+        goal: targetGoal,
+      };
+
+      const updatedProfiles = [newProfile, ...existingProfiles.filter((p) => p.id !== slug)];
+      const updated: Partial<TiltifyConfig> = {
+        ...localConfig,
+        campaignId: slug,
+        campaignName: verifiedName,
+        savedCampaignProfiles: updatedProfiles,
+      };
+
+      setLocalConfig(updated as TiltifyConfig);
+      await onSave(updated);
+      setShowRolloverPanel(false);
+      setNewCampaignSlug('');
+      setNewEventTitle('');
+      setFeedback({
+        type: 'success',
+        text: `🎉 Successfully rolled over to "${verifiedName}" (${slug})! All Discord embed styles, webhooks, and settings are preserved.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err.message || 'Failed to verify new campaign. Please check the slug.',
+      });
+    } finally {
+      setIsVerifyingRollover(false);
+    }
+  };
+
+  const handleRunHealthCheck = async (sendDiscordTest = false) => {
+    setIsCheckingHealth(true);
+    try {
+      const token = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/tiltify/campaign-health', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          campaignId: localConfig.campaignId,
+          sendDiscordTest,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Health check failed');
+      }
+      setHealthStatus({
+        success: true,
+        detectedYear: data.detectedYear,
+        isPastYear: data.isPastYear,
+        advice: data.advice,
+        campaign: data.campaign,
+        discordSent: sendDiscordTest && data.discordTestResult?.success,
+      });
+      if (sendDiscordTest) {
+        setFeedback({
+          type: 'success',
+          text: `✅ Pre-stream health check sent to Discord! Check your channel to confirm alert formatting.`,
+        });
+      }
+    } catch (err: any) {
+      setHealthStatus({
+        success: false,
+        advice: err.message,
+      });
+    } finally {
+      setIsCheckingHealth(false);
     }
   };
 
@@ -454,6 +644,224 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Render Variables Simplifier Banner */}
+            {onOpenRenderSimplifier && (
+              <div className="mb-4 bg-indigo-950/30 border border-indigo-800/40 rounded-xl p-3 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-indigo-200">Confused by 20+ Render environment variables?</span>
+                    <p className="text-[11px] text-neutral-400">You only actually need 2 variables in Render! All other styling is managed right here.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenRenderSimplifier}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-2.5 py-1.5 rounded-lg text-[11px] shrink-0 transition-colors shadow-sm flex items-center gap-1"
+                >
+                  <span>Open Simplifier</span>
+                </button>
+              </div>
+            )}
+
+            {/* Annual Campaign Rollover & Event Profiles Box */}
+            <div className="mb-4 bg-neutral-950/80 border border-neutral-800 rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 rounded bg-teal-500/10 text-teal-400">
+                    <Calendar className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-white block">Annual Campaigns &amp; Event Switcher</span>
+                    <span className="text-[10px] text-neutral-400">Switch annual slugs without losing your Discord embeds or styling</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRolloverPanel(!showRolloverPanel)}
+                  className="flex items-center gap-1 bg-teal-600 hover:bg-teal-500 text-white px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors shadow-sm"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>{showRolloverPanel ? 'Close Rollover' : 'Rollover New Year'}</span>
+                </button>
+              </div>
+
+              {/* Past Year Warning Notice */}
+              {isPastYearDetected && (
+                <div className="bg-amber-950/40 border border-amber-800/60 rounded-lg p-2.5 text-xs flex items-start gap-2 text-amber-200">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <span className="font-semibold block text-amber-300">
+                      Prior Year Detected in Slug ({slugYear})
+                    </span>
+                    <span className="text-[11px] text-amber-200/80 block mt-0.5">
+                      Your campaign slug appears to be from {slugYear}. If you are hosting a new {currentCalendarYear} event, remember to rollover your slug so alerts aren't missed!
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRolloverPanel(true)}
+                    className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold px-2 py-1 rounded text-[10px] shrink-0 transition-colors"
+                  >
+                    Rollover Now
+                  </button>
+                </div>
+              )}
+
+              {/* Inline Rollover Assistant Form */}
+              {showRolloverPanel && (
+                <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 space-y-2.5 animate-fade-in text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Start New Year / Event Rollover</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-1.5 py-0.5 rounded">
+                      Zero Disruption
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-neutral-400">
+                    Entering a new campaign slug will preserve all your Discord webhook URLs, custom avatars, embed colors, role mentions, and templates.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-semibold text-neutral-300 uppercase block mb-1">
+                        New Tiltify Campaign Slug or URL <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newCampaignSlug}
+                        onChange={(e) => setNewCampaignSlug(e.target.value)}
+                        placeholder={`e.g. gamingforher-${currentCalendarYear} or full URL`}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-neutral-300 uppercase block mb-1">
+                        Event Title / Year Tag
+                      </label>
+                      <input
+                        type="text"
+                        value={newEventTitle}
+                        onChange={(e) => setNewEventTitle(e.target.value)}
+                        placeholder={`e.g. Charity Marathon ${currentCalendarYear}`}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Discord styling &amp; channel configs kept intact</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRolloverSubmit}
+                      disabled={isVerifyingRollover || !newCampaignSlug.trim()}
+                      className="bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors shadow-sm flex items-center gap-1.5"
+                    >
+                      {isVerifyingRollover ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Verifying with Tiltify...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Activate New Campaign</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Saved Profiles Switcher Chips */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block">
+                  Campaign Profiles &amp; History:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {getSavedProfiles().map((profile) => {
+                    const isActive = localConfig.campaignId === profile.id || profile.isActive;
+                    return (
+                      <button
+                        key={profile.id}
+                        type="button"
+                        onClick={() => handleSwitchCampaign(profile)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all border ${
+                          isActive
+                            ? 'bg-teal-950/80 border-teal-600/80 text-teal-200 shadow-sm'
+                            : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700'
+                        }`}
+                        title={`Click to activate "${profile.name || profile.id}"`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-teal-400' : 'bg-neutral-600'}`} />
+                        <span>{profile.name || profile.id}</span>
+                        {profile.year && (
+                          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-neutral-950 text-neutral-400">
+                            {profile.year}
+                          </span>
+                        )}
+                        {isActive && (
+                          <span className="text-[9px] bg-teal-500/20 text-teal-300 px-1 rounded font-bold">
+                            Active
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Health Check Bar */}
+              <div className="pt-2 border-t border-neutral-850 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRunHealthCheck(false)}
+                    disabled={isCheckingHealth || !localConfig.campaignId}
+                    className="flex items-center gap-1.5 text-[11px] text-neutral-300 hover:text-white bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 px-2.5 py-1 rounded-lg transition-colors font-medium disabled:opacity-40"
+                    title="Verify Tiltify API connectivity and status"
+                  >
+                    <Activity className={`w-3.5 h-3.5 text-teal-400 ${isCheckingHealth ? 'animate-spin' : ''}`} />
+                    <span>{isCheckingHealth ? 'Checking Tiltify...' : 'Check Campaign Status'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRunHealthCheck(true)}
+                    disabled={isCheckingHealth || !localConfig.campaignId}
+                    className="flex items-center gap-1.5 text-[11px] text-indigo-300 hover:text-indigo-200 bg-indigo-950/40 hover:bg-indigo-900/40 border border-indigo-800/60 px-2.5 py-1 rounded-lg transition-colors font-medium disabled:opacity-40"
+                    title="Send a pre-flight test message to your Discord server"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Send Pre-Stream Discord Check</span>
+                  </button>
+                </div>
+
+                {healthStatus && (
+                  <span className={`text-[11px] font-medium flex items-center gap-1 ${
+                    healthStatus.success ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {healthStatus.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                    <span>{healthStatus.success ? 'Tiltify Active' : 'Check Failed'}</span>
+                  </span>
+                )}
+              </div>
+
+              {healthStatus && healthStatus.advice && (
+                <div className={`p-2 rounded-lg text-[11px] ${
+                  healthStatus.isPastYear ? 'bg-amber-950/30 text-amber-300 border border-amber-800/40' : 'bg-neutral-900 text-neutral-300 border border-neutral-800'
+                }`}>
+                  {healthStatus.advice}
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">

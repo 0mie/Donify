@@ -249,10 +249,13 @@ function loadDonationsFromDisk(): boolean {
       const raw = fs.readFileSync(DONATIONS_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed.donations) && parsed.donations.length > 0) {
-        // Purge any invalid 0-bid auction records (unsold lots with 0 bids)
+        // Purge any invalid 0-bid auction records or 0-dollar fake donation records
         state.donations = parsed.donations.filter((d: any) => {
+          if (!d.amount || isNaN(d.amount) || d.amount <= 0) {
+            return false;
+          }
           const isAuction = d.eventType === "auction_ended" || Boolean(d.auction);
-          if (isAuction && (d.amount <= 0 || !d.amount || isNaN(d.amount) || (d.auction && (d.auction.winningBid <= 0 || !d.auction.winningBid)))) {
+          if (isAuction && (d.auction && (d.auction.winningBid <= 0 || !d.auction.winningBid))) {
             return false;
           }
           return true;
@@ -576,8 +579,10 @@ if (!restored && !state.tiltify.campaignId) {
   state.botStatus.totalAuctionsProcessed = 1;
   state.botStatus.totalAmountProcessed = 525.0;
 } else if (state.tiltify.campaignId) {
-  // Purge any legacy mock seed items from real campaign history
-  state.donations = state.donations.filter((d) => d.id !== "seed-001" && d.id !== "demo-auc-001");
+  // Purge any legacy mock seed items or invalid 0-dollar items from real campaign history
+  state.donations = state.donations.filter(
+    (d) => d.id !== "seed-001" && d.id !== "demo-auc-001" && typeof d.amount === "number" && d.amount > 0
+  );
   state.seenDonationIds.delete("seed-001");
   state.seenAuctionIds.delete("demo-auc-001");
 }
@@ -963,6 +968,7 @@ function buildDiscordEmbed(
         `**Donor:** ${donation.donorName || "Anonymous"}`,
         `**Amount:** ${formattedAmount}`,
         ...(config.includeCampaignDetails && donation.campaignName ? [`**Campaign:** ${donation.campaignName}`] : []),
+        ...(donation.teamMemberName ? [`**Member:** ${donation.teamMemberName}`] : []),
       ].join("  •  ");
 
       embedFields.push({
@@ -1012,6 +1018,7 @@ function buildDiscordEmbed(
         const details: string[] = [];
         if (donation.campaignName) details.push(`**${donation.campaignName}**`);
         if (donation.causeName) details.push(`*${donation.causeName}*`);
+        if (donation.teamMemberName) details.push(`👤 Team Member: **${donation.teamMemberName}**`);
         embedFields.push({
           name: "🎯 Campaign",
           value: details.join(" • "),
@@ -2872,6 +2879,12 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
           amountVal = parseFloat(String(raw.amount));
         }
 
+        // Strictly ignore any non-positive or 0-dollar items (Tiltify donations must have amount > 0)
+        if (isNaN(amountVal) || amountVal <= 0) {
+          console.warn(`[Tiltify Poll] Skipping invalid/zero-dollar item ${donationId} (Amount: $${amountVal})`);
+          continue;
+        }
+
         const { donorEmail, reward } = extractRewardAndDelivery(raw, state.campaignRewardsCache);
 
         const effectiveCampaignName =
@@ -2881,17 +2894,38 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
           raw.campaign?.name ||
           "Tiltify Campaign";
 
+        // Safe donor name: Never fallback to campaign name
+        const campaignLower = effectiveCampaignName.toLowerCase().trim();
+        let extractedDonor = (raw.donor_name || "").trim();
+        if (!extractedDonor && raw.name) {
+          const rawNameLower = String(raw.name).toLowerCase().trim();
+          if (rawNameLower && rawNameLower !== campaignLower) {
+            extractedDonor = String(raw.name).trim();
+          }
+        }
+        if (!extractedDonor) {
+          extractedDonor = "Anonymous Supporter";
+        }
+
+        const rawSupporting = raw.supporting_campaign || raw.team_member || raw.member;
+        const teamMemberName =
+          (typeof rawSupporting === "object" ? (rawSupporting.user?.name || rawSupporting.name || rawSupporting.title) : undefined) ||
+          raw.team_member_name ||
+          (raw.campaign?.user?.name && raw.campaign?.user?.name !== effectiveCampaignName ? raw.campaign.user.name : undefined) ||
+          undefined;
+
         const newDonation: DonationRecord = {
           id: donationId,
           tiltifyId: donationId,
-          donorName: raw.donor_name || raw.name || "Anonymous",
+          donorName: extractedDonor,
           donorEmail: donorEmail,
-          amount: isNaN(amountVal) ? 0 : amountVal,
+          amount: amountVal,
           currency: currencyVal,
           comment: raw.comment || raw.message || raw.donor_comment || undefined,
           reward: reward,
           campaignName: effectiveCampaignName,
           campaignId: campaignId,
+          teamMemberName: teamMemberName,
           totalRaised: campaignSummary?.totalRaised,
           targetGoal: campaignSummary?.targetGoal,
           receivedAt: raw.completed_at || raw.created_at || new Date().toISOString(),
@@ -3708,6 +3742,82 @@ app.post("/api/tiltify/fetch-campaign", requireAuth, async (req: Request, res: R
   }
 });
 
+// 2.65 POST /api/tiltify/campaign-health: Verify campaign health, detect year discrepancies & optional Discord test
+app.post("/api/tiltify/campaign-health", requireAuth, async (req: Request, res: Response) => {
+  const targetId = (req.body.campaignId || state.tiltify.campaignId || "").trim();
+  const sendDiscordTest = Boolean(req.body.sendDiscordTest);
+
+  if (!targetId) {
+    return res.status(400).json({
+      success: false,
+      error: "No Campaign ID or Slug provided. Please configure a campaign first.",
+    });
+  }
+
+  try {
+    const summary = await fetchLiveCampaignSummary(targetId, true);
+    if (!summary || !summary.name) {
+      return res.status(404).json({
+        success: false,
+        error: `Campaign "${targetId}" could not be found or verified on Tiltify. Check the slug or credentials.`,
+      });
+    }
+
+    const currentCalendarYear = new Date().getFullYear();
+    const strToCheck = `${targetId} ${summary.name} ${summary.slug || ""}`.toLowerCase();
+    
+    // Check if contains a 4-digit year like 2022, 2023, 2024, 2025, 2026, 2027
+    const yearMatch = strToCheck.match(/\b(202[0-9])\b/);
+    const detectedYear = yearMatch ? parseInt(yearMatch[1], 10) : undefined;
+    const isPastYear = Boolean(detectedYear && detectedYear < currentCalendarYear);
+
+    const advice = isPastYear
+      ? `This campaign appears to be for ${detectedYear}. If you are hosting a new ${currentCalendarYear} event, roll over to your new annual slug to avoid missing donation alerts!`
+      : `Campaign "${summary.name}" is healthy and connected to Tiltify.`;
+
+    let discordTestResult: any = null;
+    if (sendDiscordTest) {
+      const testRecord: DonationRecord = {
+        id: `health-check-${Date.now()}`,
+        donorName: "Tiltify Campaign Health Monitor",
+        amount: 1.0,
+        currency: summary.currency || "USD",
+        comment: `✅ Campaign connection verified for "${summary.name}". Ready for live stream alerts!`,
+        campaignName: summary.name,
+        totalRaised: summary.totalRaised,
+        targetGoal: summary.targetGoal,
+        receivedAt: new Date().toISOString(),
+        source: "simulator",
+        discordStatus: "pending",
+      };
+      const result = await dispatchDiscordAlert(testRecord, state.discord);
+      discordTestResult = result;
+    }
+
+    res.json({
+      success: true,
+      campaign: {
+        id: summary.id,
+        name: summary.name,
+        slug: summary.slug || targetId,
+        totalRaised: summary.totalRaised,
+        targetGoal: summary.targetGoal,
+        currency: summary.currency || "USD",
+      },
+      currentCalendarYear,
+      detectedYear,
+      isPastYear,
+      advice,
+      discordTestResult,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err?.message || "Error running campaign health check.",
+    });
+  }
+});
+
 // 3. POST /api/discord/test: Send a test embed to Discord
 app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) => {
   const isAuction = req.body.eventType === "auction_ended" || Boolean(req.body.auction);
@@ -4237,12 +4347,127 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
     const payload = req.body;
     // Support multiple Tiltify webhook shapes:
     // Format A: { event: "donation.donated" | "auction.ended", data: { ... } }
-    // Format B: { id, amount, donor_name, comment, ... }
+    // Format B: Tiltify v5 Webhook Subscriptions: { meta: { event_type: "public:direct:fact_updated" | "public:direct:donation_updated" }, data: { ... } }
+    // Format C: { id, amount, donor_name, comment, ... }
     const raw = payload?.data || payload;
-    const eventType = String(payload?.event || raw?.event || "").toLowerCase();
 
-    const auctionInfo = extractAuctionWinnerInfo(raw, eventType);
+    // Normalize webhook topic / event from headers, meta object, or payload root
+    const topic = String(
+      req.headers["x-tiltify-webhook-topic"] ||
+      req.headers["x-tiltify-event"] ||
+      payload?.meta?.event_type ||
+      payload?.meta?.topic ||
+      payload?.event_type ||
+      payload?.event ||
+      payload?.topic ||
+      raw?.event ||
+      raw?.event_type ||
+      raw?.topic ||
+      ""
+    ).toLowerCase().trim();
+
+    console.log(`[Tiltify Webhook] Inbound webhook event topic: "${topic}"`);
+
+    // 1. Detect Tiltify Fact / Campaign Updates (e.g., public:direct:fact_updated, campaign.updated)
+    // In Tiltify v5, whenever a donation occurs, Tiltify fires BOTH donation_updated AND fact_updated.
+    // The fact_updated payload contains the campaign object (name: campaign title, amount_raised, goal) with NO donation amount.
+    // It must update the live campaign raised stats, but NEVER be dispatched to Discord as a $0 donation!
+    const isFactUpdate =
+      topic.includes("fact_updated") ||
+      topic.includes("fact:") ||
+      topic.includes("campaign.updated") ||
+      topic.includes("campaign_updated") ||
+      topic.includes("campaign:updated") ||
+      topic.includes("campaign.published") ||
+      Boolean(!raw?.donor_name && !raw?.amount && (raw?.total_amount_raised || raw?.amount_raised || raw?.goal));
+
+    if (isFactUpdate) {
+      const raisedVal =
+        raw?.total_amount_raised?.value ??
+        raw?.amount_raised?.value ??
+        raw?.total_amount_raised ??
+        raw?.amount_raised ??
+        payload?.total_amount_raised?.value ??
+        payload?.amount_raised?.value;
+      const goalVal =
+        raw?.goal?.value ??
+        raw?.goal ??
+        payload?.goal?.value ??
+        payload?.goal;
+
+      if (raisedVal !== undefined) {
+        const numRaised = parseFloat(String(raisedVal));
+        if (!isNaN(numRaised) && numRaised > 0) {
+          state.botStatus.totalAmountProcessed = numRaised;
+          if (cachedCampaignSummary) cachedCampaignSummary.totalRaised = numRaised;
+        }
+      }
+      if (goalVal !== undefined) {
+        const numGoal = parseFloat(String(goalVal));
+        if (!isNaN(numGoal) && numGoal > 0) {
+          if (cachedCampaignSummary) cachedCampaignSummary.targetGoal = numGoal;
+        }
+      }
+      if (raw?.name && typeof raw.name === "string" && !state.tiltify.campaignName) {
+        state.tiltify.campaignName = raw.name.trim();
+      }
+
+      console.log(
+        `[Tiltify Webhook] Received campaign fact update ("${topic || "fact_updated"}"). Synchronized live campaign stats without dispatching a duplicate donation alert.`
+      );
+      res.status(200).json({
+        status: "acknowledged",
+        eventType: "fact_updated",
+        message: "Campaign statistics updated without sending a donation alert.",
+      });
+      return;
+    }
+
+    // 2. Acknowledge Pings, Tests, Challenges, Milestones, and Polls without sending donation alerts
+    if (
+      topic === "ping" ||
+      topic === "test" ||
+      topic.includes("webhook:test") ||
+      topic.includes("challenge") ||
+      topic.includes("milestone") ||
+      topic.includes("poll")
+    ) {
+      console.log(`[Tiltify Webhook] Acknowledged non-donation event: "${topic}".`);
+      res.status(200).json({ status: "acknowledged", topic, message: "Non-donation event acknowledged." });
+      return;
+    }
+
+    // 3. Auction Winner Detection
+    const auctionInfo = extractAuctionWinnerInfo(raw, topic);
     const isAuction = Boolean(auctionInfo);
+
+    // 4. Amount parsing & $0 Donation Prevention
+    let amount = 0;
+    let currency = "USD";
+    if (isAuction && auctionInfo) {
+      amount = auctionInfo.winningBid;
+      currency = auctionInfo.currency;
+    } else {
+      if (typeof raw?.amount === "object" && raw?.amount !== null) {
+        amount = parseFloat(raw.amount.value || raw.amount.amount || "0");
+        currency = raw.amount.currency || "USD";
+      } else if (typeof raw?.amount === "number" || typeof raw?.amount === "string") {
+        amount = parseFloat(String(raw.amount));
+      }
+    }
+
+    // STRICT GUARD: Tiltify NEVER has genuine $0 donations!
+    // If amount is 0 or NaN and it's not an auction with a valid winning bid, IGNORE IT!
+    if (isNaN(amount) || amount <= 0) {
+      console.warn(
+        `[Tiltify Webhook] Ignored $0.00 / non-donation payload (Topic: "${topic}", ID: ${raw?.id}, Name: ${raw?.name || raw?.donor_name || "Unknown"}). No Discord alert sent.`
+      );
+      res.status(200).json({
+        status: "ignored",
+        reason: "Zero or invalid donation amount. Tiltify donation alerts require amount > 0.",
+      });
+      return;
+    }
 
     const donationId = String(
       (isAuction ? auctionInfo?.auctionId : null) ||
@@ -4250,6 +4475,39 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
       raw?.public_id ||
       `webhook-${Date.now()}`
     );
+
+    // Duplicate Check: Check both seen sets AND existing state.donations array!
+    const seenSet = isAuction ? state.seenAuctionIds : state.seenDonationIds;
+    if (
+      seenSet.has(donationId) ||
+      state.donations.some((d) => d.id === donationId || d.tiltifyId === donationId)
+    ) {
+      console.log(`[Tiltify Webhook] Ignored duplicate event ID: ${donationId}`);
+      res.status(200).json({ status: "ignored", message: "Event already processed." });
+      return;
+    }
+
+    seenSet.add(donationId);
+
+    // Safe Donor Name Extraction: Never accidentally use the campaign name as donor name!
+    const campaignNameCandidate = (
+      state.tiltify.campaignName ||
+      state.discord.campaignName ||
+      raw?.campaign?.name ||
+      raw?.campaign_name ||
+      ""
+    ).toLowerCase().trim();
+
+    let extractedDonorName = (raw?.donor_name || "").trim();
+    if (!extractedDonorName && raw?.name) {
+      const rawNameLower = String(raw.name).toLowerCase().trim();
+      if (rawNameLower && (!campaignNameCandidate || rawNameLower !== campaignNameCandidate)) {
+        extractedDonorName = String(raw.name).trim();
+      }
+    }
+    if (!extractedDonorName) {
+      extractedDonorName = isAuction ? (auctionInfo?.winnerName || "Auction Winner") : "Anonymous Supporter";
+    }
 
     let donation: DonationRecord;
 
@@ -4272,30 +4530,29 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
         rawPayload: payload,
       };
     } else {
-      let amount = 0;
-      let currency = "USD";
-      if (typeof raw?.amount === "object" && raw?.amount !== null) {
-        amount = parseFloat(raw.amount.value || raw.amount.amount || "0");
-        currency = raw.amount.currency || "USD";
-      } else if (typeof raw?.amount === "number" || typeof raw?.amount === "string") {
-        amount = parseFloat(String(raw.amount));
-      }
-
       const { donorEmail, reward } = extractRewardAndDelivery(raw, state.campaignRewardsCache);
+
+      const rawSupporting = raw.supporting_campaign || raw.team_member || raw.member;
+      const teamMemberName =
+        (typeof rawSupporting === "object" ? (rawSupporting.user?.name || rawSupporting.name || rawSupporting.title) : undefined) ||
+        raw.team_member_name ||
+        (raw.campaign?.user?.name && raw.campaign?.user?.name !== (state.tiltify.campaignName?.trim() || raw?.campaign?.name) ? raw.campaign.user.name : undefined) ||
+        undefined;
 
       donation = {
         id: donationId,
         tiltifyId: donationId,
-        donorName: raw?.donor_name || raw?.name || "Anonymous Donor",
+        donorName: extractedDonorName,
         donorEmail: donorEmail,
-        amount: isNaN(amount) ? 0 : amount,
+        amount: amount,
         currency: currency,
-        comment: raw?.comment || raw?.message || undefined,
+        comment: raw?.comment || raw?.message || raw?.donor_comment || undefined,
         reward: reward,
         campaignName: state.tiltify.campaignName?.trim() || raw?.campaign?.name || raw?.campaign_name || "Tiltify Campaign",
         campaignId: raw?.campaign_id || state.tiltify.campaignId || undefined,
+        teamMemberName: teamMemberName,
         causeName: raw?.cause?.name || raw?.charity?.name || undefined,
-        receivedAt: raw?.created_at || new Date().toISOString(),
+        receivedAt: raw?.completed_at || raw?.created_at || new Date().toISOString(),
         source: "webhook",
         discordStatus: "pending",
         rawPayload: payload,
@@ -4303,20 +4560,10 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
     }
 
     console.log(
-      `[Tiltify Webhook] Received webhook event! ID: ${donationId}, Type: ${
+      `[Tiltify Webhook] Received valid donation! ID: ${donationId}, Type: ${
         isAuction ? "auction_ended" : "donation"
-      }, Amount: ${donation.amount} ${donation.currency}, Donor: ${donation.donorName}`
+      }, Amount: $${donation.amount} ${donation.currency}, Donor: "${donation.donorName}"`
     );
-
-    // If duplicate check (per donation/auction id)
-    const seenSet = isAuction ? state.seenAuctionIds : state.seenDonationIds;
-    if (seenSet.has(donationId)) {
-      console.log(`[Tiltify Webhook] Ignored duplicate event ID: ${donationId}`);
-      res.status(200).json({ status: "ignored", message: "Event already processed." });
-      return;
-    }
-
-    seenSet.add(donationId);
 
     // Extract or fetch campaign total amount raised & goal progress
     const campObj = raw?.campaign || payload?.campaign || payload?.data?.campaign;

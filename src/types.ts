@@ -93,6 +93,17 @@ export interface DiscordConfig {
   auctionMentionRoleId?: string;
 }
 
+export interface SavedCampaignProfile {
+  id: string;
+  name?: string;
+  year?: number;
+  lastUsedAt?: string;
+  isActive?: boolean;
+  status?: 'active' | 'ended' | 'upcoming' | 'unknown';
+  goal?: number;
+  totalRaised?: number;
+}
+
 export interface TiltifyConfig {
   clientId?: string;
   clientSecret?: string;
@@ -108,6 +119,14 @@ export interface TiltifyConfig {
   auctionDateRangeStart?: string;
   auctionDateRangeEnd?: string;
   auctionHouseIdOrSlug?: string;
+  savedCampaignProfiles?: SavedCampaignProfile[];
+  enableAnnualReminder?: boolean;
+  currentCampaignYear?: number;
+  lastCampaignHealthCheck?: {
+    timestamp: string;
+    status: 'active' | 'ended' | 'not_found' | 'error';
+    message: string;
+  };
 }
 
 export interface DonationRecord {
@@ -123,6 +142,7 @@ export interface DonationRecord {
   auction?: AuctionWinnerInfo;
   campaignName?: string;
   campaignId?: string;
+  teamMemberName?: string;
   causeName?: string;
   targetGoal?: number;
   totalRaised?: number;

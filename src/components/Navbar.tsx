@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BotStatus } from '../types';
-import { Bot, Radio, HelpCircle, BellRing, Lock, ShieldCheck, ShieldAlert, KeyRound, LogOut, ChevronDown, HardDrive } from 'lucide-react';
+import { Bot, Radio, HelpCircle, BellRing, Lock, ShieldCheck, ShieldAlert, KeyRound, LogOut, ChevronDown, HardDrive, Zap } from 'lucide-react';
 
 interface NavbarProps {
   status: BotStatus;
@@ -11,6 +11,7 @@ interface NavbarProps {
   onSetupPasscode: () => void;
   onChangePasscode: () => void;
   onLock: () => void;
+  onOpenRenderSimplifier?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,6 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSetupPasscode,
   onChangePasscode,
   onLock,
+  onOpenRenderSimplifier,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -159,6 +161,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <HardDrive className="w-3.5 h-3.5 text-teal-400" />
             <span className="hidden sm:inline">Backup & Sync</span>
           </button>
+
+          {/* Render Simplifier Button */}
+          {onOpenRenderSimplifier && (
+            <button
+              onClick={onOpenRenderSimplifier}
+              className="flex items-center gap-1.5 bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-medium border border-purple-800/80 transition-colors shadow-sm"
+              title="Render environment variables simplified (Only 2 required!)"
+            >
+              <Zap className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Render Setup</span>
+            </button>
+          )}
 
           {/* Setup Guide Button */}
           <button
