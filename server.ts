@@ -174,8 +174,40 @@ function saveConfigToDisk() {
 
     // Also persist to root render-config.json and config.json (persists across git commits if checked in)
     try {
-      fs.writeFileSync(path.join(process.cwd(), "render-config.json"), JSON.stringify(toSave, null, 2), "utf-8");
-      fs.writeFileSync(path.join(process.cwd(), "config.json"), JSON.stringify(toSave, null, 2), "utf-8");
+      const renderPath = path.join(process.cwd(), "render-config.json");
+      const configPath = path.join(process.cwd(), "config.json");
+
+      const mergeWithExisting = (filePath: string) => {
+        if (!fs.existsSync(filePath)) return toSave;
+        try {
+          const existingRaw = fs.readFileSync(filePath, "utf-8");
+          const existing = JSON.parse(existingRaw);
+          const merged = { ...toSave };
+          if (existing.discord && typeof existing.discord === "object") {
+            merged.discord = { ...existing.discord, ...merged.discord };
+            // Ensure non-empty existing values aren't overwritten by empty strings
+            for (const [k, v] of Object.entries(existing.discord)) {
+              if (typeof v === "string" && v.trim() && !(merged.discord as any)[k]) {
+                (merged.discord as any)[k] = v.trim();
+              }
+            }
+          }
+          if (existing.tiltify && typeof existing.tiltify === "object") {
+            merged.tiltify = { ...existing.tiltify, ...merged.tiltify };
+            for (const [k, v] of Object.entries(existing.tiltify)) {
+              if (typeof v === "string" && v.trim() && !(merged.tiltify as any)[k]) {
+                (merged.tiltify as any)[k] = v.trim();
+              }
+            }
+          }
+          return merged;
+        } catch {
+          return toSave;
+        }
+      };
+
+      fs.writeFileSync(renderPath, JSON.stringify(mergeWithExisting(renderPath), null, 2), "utf-8");
+      fs.writeFileSync(configPath, JSON.stringify(mergeWithExisting(configPath), null, 2), "utf-8");
     } catch {}
 
     if (state.customAvatar?.buffer) {
@@ -370,25 +402,41 @@ function loadDonationsFromDisk(): boolean {
   return false;
 }
 
+function mergeNonEmpty(target: Record<string, any>, source: Record<string, any>) {
+  if (!source || typeof source !== "object") return;
+  for (const [key, val] of Object.entries(source)) {
+    if (val === undefined || val === null) continue;
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      // Only overwrite if source string is non-empty, OR target field is currently unset
+      if (trimmed !== "" || target[key] === undefined) {
+        target[key] = trimmed;
+      }
+    } else {
+      target[key] = val;
+    }
+  }
+}
+
 function applyConfigObject(parsed: any, sourceName: string) {
   if (!parsed || typeof parsed !== "object") return;
 
-  if (parsed.adminPassword && typeof parsed.adminPassword === "string") {
+  if (parsed.adminPassword && typeof parsed.adminPassword === "string" && parsed.adminPassword.trim()) {
     state.adminPassword = parsed.adminPassword.trim();
   }
   if (parsed.discord && typeof parsed.discord === "object") {
-    state.discord = { ...state.discord, ...parsed.discord };
+    mergeNonEmpty(state.discord as any, parsed.discord);
   }
   if (parsed.tiltify && typeof parsed.tiltify === "object") {
-    state.tiltify = { ...state.tiltify, ...parsed.tiltify };
+    mergeNonEmpty(state.tiltify as any, parsed.tiltify);
   }
 
   // Handle flat env-style keys in JSON or .env
-  if (parsed.DISCORD_WEBHOOK_URL) state.discord.webhookUrl = String(parsed.DISCORD_WEBHOOK_URL).trim();
-  if (parsed.DISCORD_BOT_TOKEN) state.discord.botToken = String(parsed.DISCORD_BOT_TOKEN).trim();
-  if (parsed.DISCORD_CHANNEL_ID) state.discord.channelId = String(parsed.DISCORD_CHANNEL_ID).trim();
-  if (parsed.DISCORD_AUCTION_WEBHOOK_URL) state.discord.auctionWebhookUrl = String(parsed.DISCORD_AUCTION_WEBHOOK_URL).trim();
-  if (parsed.DISCORD_AUCTION_CHANNEL_ID) state.discord.auctionChannelId = String(parsed.DISCORD_AUCTION_CHANNEL_ID).trim();
+  if (parsed.DISCORD_WEBHOOK_URL && String(parsed.DISCORD_WEBHOOK_URL).trim()) state.discord.webhookUrl = String(parsed.DISCORD_WEBHOOK_URL).trim();
+  if (parsed.DISCORD_BOT_TOKEN && String(parsed.DISCORD_BOT_TOKEN).trim()) state.discord.botToken = String(parsed.DISCORD_BOT_TOKEN).trim();
+  if (parsed.DISCORD_CHANNEL_ID && String(parsed.DISCORD_CHANNEL_ID).trim()) state.discord.channelId = String(parsed.DISCORD_CHANNEL_ID).trim();
+  if (parsed.DISCORD_AUCTION_WEBHOOK_URL && String(parsed.DISCORD_AUCTION_WEBHOOK_URL).trim()) state.discord.auctionWebhookUrl = String(parsed.DISCORD_AUCTION_WEBHOOK_URL).trim();
+  if (parsed.DISCORD_AUCTION_CHANNEL_ID && String(parsed.DISCORD_AUCTION_CHANNEL_ID).trim()) state.discord.auctionChannelId = String(parsed.DISCORD_AUCTION_CHANNEL_ID).trim();
   if (parsed.DISCORD_SEPARATE_AUCTION_CHANNEL !== undefined) {
     state.discord.separateAuctionChannel = parsed.DISCORD_SEPARATE_AUCTION_CHANNEL === true || parsed.DISCORD_SEPARATE_AUCTION_CHANNEL === "true";
   }
@@ -401,24 +449,24 @@ function applyConfigObject(parsed: any, sourceName: string) {
   if (parsed.DISCORD_AUCTION_MENTION_TYPE) {
     state.discord.auctionMentionType = parsed.DISCORD_AUCTION_MENTION_TYPE;
   }
-  if (parsed.DISCORD_AUCTION_MENTION_ROLE_ID) {
+  if (parsed.DISCORD_AUCTION_MENTION_ROLE_ID && String(parsed.DISCORD_AUCTION_MENTION_ROLE_ID).trim()) {
     state.discord.auctionMentionRoleId = String(parsed.DISCORD_AUCTION_MENTION_ROLE_ID).trim();
   }
-  if (parsed.DISCORD_FOOTER_TEXT) state.discord.footerText = String(parsed.DISCORD_FOOTER_TEXT).trim();
-  if (parsed.TILTIFY_CAMPAIGN_ID) state.tiltify.campaignId = String(parsed.TILTIFY_CAMPAIGN_ID).trim();
-  if (parsed.TILTIFY_CAMPAIGN_NAME) state.tiltify.campaignName = String(parsed.TILTIFY_CAMPAIGN_NAME).trim();
-  if (parsed.TILTIFY_CLIENT_ID) state.tiltify.clientId = String(parsed.TILTIFY_CLIENT_ID).trim();
-  if (parsed.TILTIFY_CLIENT_SECRET) state.tiltify.clientSecret = String(parsed.TILTIFY_CLIENT_SECRET).trim();
-  if (parsed.TILTIFY_API_TOKEN) state.tiltify.apiToken = String(parsed.TILTIFY_API_TOKEN).trim();
-  if (parsed.ADMIN_PASSWORD) state.adminPassword = String(parsed.ADMIN_PASSWORD).trim();
+  if (parsed.DISCORD_FOOTER_TEXT && String(parsed.DISCORD_FOOTER_TEXT).trim()) state.discord.footerText = String(parsed.DISCORD_FOOTER_TEXT).trim();
+  if (parsed.TILTIFY_CAMPAIGN_ID && String(parsed.TILTIFY_CAMPAIGN_ID).trim()) state.tiltify.campaignId = String(parsed.TILTIFY_CAMPAIGN_ID).trim();
+  if (parsed.TILTIFY_CAMPAIGN_NAME && String(parsed.TILTIFY_CAMPAIGN_NAME).trim()) state.tiltify.campaignName = String(parsed.TILTIFY_CAMPAIGN_NAME).trim();
+  if (parsed.TILTIFY_CLIENT_ID && String(parsed.TILTIFY_CLIENT_ID).trim()) state.tiltify.clientId = String(parsed.TILTIFY_CLIENT_ID).trim();
+  if (parsed.TILTIFY_CLIENT_SECRET && String(parsed.TILTIFY_CLIENT_SECRET).trim()) state.tiltify.clientSecret = String(parsed.TILTIFY_CLIENT_SECRET).trim();
+  if (parsed.TILTIFY_API_TOKEN && String(parsed.TILTIFY_API_TOKEN).trim()) state.tiltify.apiToken = String(parsed.TILTIFY_API_TOKEN).trim();
+  if (parsed.ADMIN_PASSWORD && String(parsed.ADMIN_PASSWORD).trim()) state.adminPassword = String(parsed.ADMIN_PASSWORD).trim();
 
   // Handle embedded DONIFY_CONFIG
   if (parsed.DONIFY_CONFIG) {
     try {
       const inner = typeof parsed.DONIFY_CONFIG === "string" ? JSON.parse(parsed.DONIFY_CONFIG) : parsed.DONIFY_CONFIG;
-      if (inner.discord) state.discord = { ...state.discord, ...inner.discord };
-      if (inner.tiltify) state.tiltify = { ...state.tiltify, ...inner.tiltify };
-      if (inner.adminPassword) state.adminPassword = inner.adminPassword;
+      if (inner.discord) mergeNonEmpty(state.discord as any, inner.discord);
+      if (inner.tiltify) mergeNonEmpty(state.tiltify as any, inner.tiltify);
+      if (inner.adminPassword && String(inner.adminPassword).trim()) state.adminPassword = inner.adminPassword.trim();
     } catch {}
   }
 
@@ -1979,7 +2027,7 @@ async function fetchAllCampaignAuctions(
 
   // 2. Discover Auction House ID & Slug
   const candidateTarget = parseAuctionHouseTarget(
-    options?.auctionHouseIdOrSlug || state.tiltify.auctionHouseIdOrSlug || ""
+    options?.auctionHouseIdOrSlug || state.tiltify.auctionHouseIdOrSlug || process.env.TILTIFY_AUCTION_HOUSE_ID || "fc5ad221-74fc-48c8-975c-c5b1f41aadf7"
   );
 
   let ahObj: any = null;
@@ -2002,12 +2050,12 @@ async function fetchAllCampaignAuctions(
   const targetUserSlug = candidateTarget.userSlug || userSlug || "0mie";
   const candidateSlugs = [
     candidateTarget.slug,
+    "2026-auctions",
     "gamingforher",
     "gamingforher-auction",
     "gamingforher-auctions",
     "extra-life-2026",
     "extra-life",
-    "2026-auctions",
     "auctions",
     campSlug ? `${campSlug}-auctions` : "",
     campSlug,
@@ -4041,10 +4089,28 @@ app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Re
   }
 
   try {
-    const { auctions, errors } = await fetchAllCampaignAuctions(targetId, {
+    const { auctions, errors: fetchErrors } = await fetchAllCampaignAuctions(targetId, {
       startDate: startDate || undefined,
       endDate: endDate || undefined,
       maxPages: 10,
+    });
+    const auctionErrors: string[] = Array.isArray(fetchErrors) ? [...fetchErrors] : [];
+
+    // Check if Discord destination is configured before attempting dispatch
+    const hasDiscord =
+      state.discord.mode === "webhook"
+        ? Boolean(state.discord.webhookUrl?.trim() || state.discord.auctionWebhookUrl?.trim())
+        : Boolean(state.discord.channelId?.trim() && state.discord.botToken?.trim());
+
+    if (sendToDiscord && !hasDiscord) {
+      auctionErrors.push("Discord Webhook is not configured! Alerts were recorded in Donify, but not sent to Discord. Please configure your Discord Webhook in Discord Settings.");
+    }
+
+    // Sort auctions chronologically (oldest ended first) so alerts stream to Discord in natural order
+    auctions.sort((a, b) => {
+      const timeA = new Date(a.endedAt || (a.rawPayload && (a.rawPayload.completed_at || a.rawPayload.ends_at)) || 0).getTime();
+      const timeB = new Date(b.endedAt || (b.rawPayload && (b.rawPayload.completed_at || b.rawPayload.ends_at)) || 0).getTime();
+      return timeA - timeB;
     });
 
     let importedCount = 0;
@@ -4052,7 +4118,7 @@ app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Re
     let totalAuctionAmount = 0;
     const campaignSummary = await fetchLiveCampaignSummary(targetId, true);
 
-    // Clean up any legacy summary record so the 4 individual prizes replace it cleanly
+    // Clean up any legacy summary record so the individual prizes replace it cleanly
     state.donations = state.donations.filter((d) => !d.id.startsWith("auc-settled-") && !d.id.startsWith("auc-tiltify-"));
 
     for (const rawAuc of auctions) {
@@ -4234,7 +4300,7 @@ app.post("/api/tiltify/pull-auctions", requireAuth, async (req: Request, res: Re
       dispatchedCount,
       totalPulled: auctions.length,
       totalAuctionAmount,
-      errors,
+      errors: auctionErrors.length > 0 ? auctionErrors : undefined,
       campaignSummary: refreshedSummary,
       status: state.botStatus,
       message: `Successfully pulled ${auctions.length} individual auction prize(s) (${importedCount} imported, ${dispatchedCount} dispatched to Discord with shipping info). Total campaign funds: $${(refreshedSummary?.totalRaised || state.botStatus.totalAmountProcessed).toFixed(2)}.`,
@@ -4302,26 +4368,71 @@ app.post("/api/tiltify/dispatch-prizes", requireAuth, async (req: Request, res: 
 
 // Helper: Query all pages of donations & auctions from campaign start
 async function fetchAllCampaignHistory(campaignId: string) {
-  const cid = campaignId.trim();
-  const campaignSummary = await fetchLiveCampaignSummary(cid, true);
-  await refreshCampaignRewards(cid);
+  const cid = cleanCampaignIdentifier(campaignId || state.tiltify.campaignId || "").trim();
+  if (!cid) {
+    throw new Error("No campaign ID, UUID, or slug provided. Please configure a campaign first.");
+  }
 
-  const getHeaders = () => {
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (state.tiltify.apiToken) headers["Authorization"] = `Bearer ${state.tiltify.apiToken.trim()}`;
-    return headers;
-  };
+  // 1. Authenticate with Tiltify v5 API
+  const headers = await getTiltifyAuthHeaders();
+  if (!headers["Authorization"]) {
+    throw new Error(
+      "Tiltify API Access Token is required to fetch campaign donations and auctions. Please paste your Tiltify API Token (or provide Client ID & Secret) in settings."
+    );
+  }
 
-  // 1. Paginate through all donations from Tiltify API v5
+  // 2. Resolve campaign UUID if vanity slug or URL was provided
+  let targetUuid = cid;
+  let campaignSummary = await fetchLiveCampaignSummary(cid, true);
+
+  // If not standard 36-character UUID format, resolve from summary or slug endpoint
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cid);
+  if (!isUuid && campaignSummary?.id) {
+    targetUuid = campaignSummary.id;
+  }
+
+  await refreshCampaignRewards(targetUuid);
+
+  // 3. Paginate through all donations from Tiltify API v5
   let cursor: string | null = null;
   let pageCount = 0;
   const rawDonations: any[] = [];
+  const errors: string[] = [];
 
-  while (pageCount < 10) {
-    const pageUrl: string = `https://v5api.tiltify.com/api/public/campaigns/${cid}/donations?limit=100${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`;
+  while (pageCount < 20) {
+    const pageUrl: string = `https://v5api.tiltify.com/api/public/campaigns/${encodeURIComponent(targetUuid)}/donations?limit=100${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`;
     try {
-      const pageRes: any = await fetch(pageUrl, { headers: getHeaders() });
-      if (!pageRes.ok) break;
+      const pageRes: any = await fetch(pageUrl, { headers });
+      if (!pageRes.ok) {
+        const errText = await pageRes.text();
+        if (pageRes.status === 401 || pageRes.status === 403) {
+          throw new Error(
+            `Tiltify API HTTP ${pageRes.status} Unauthorized: Access token is missing, expired, or rejected. Please verify your Tiltify API Token in Settings.`
+          );
+        }
+        if (pageRes.status === 404) {
+          // If 404 with slug, attempt resolving by slug endpoint once
+          if (!isUuid && targetUuid === cid) {
+            const slugRes = await fetch(
+              `https://v5api.tiltify.com/api/public/campaigns/by/slug/${encodeURIComponent(cid)}`,
+              { headers }
+            );
+            if (slugRes.ok) {
+              const slugJson = await slugRes.json();
+              const foundCamp = slugJson?.data || slugJson;
+              if (foundCamp?.id) {
+                targetUuid = foundCamp.id;
+                continue; // retry loop with resolved UUID
+              }
+            }
+          }
+          throw new Error(
+            `Campaign '${cid}' was not found on Tiltify (HTTP 404). Please verify your campaign UUID or slug.`
+          );
+        }
+        throw new Error(`Tiltify API returned HTTP ${pageRes.status}: ${errText.slice(0, 150)}`);
+      }
+
       const pageJson: any = await pageRes.json();
       const pageData = Array.isArray(pageJson?.data) ? pageJson.data : (Array.isArray(pageJson) ? pageJson : []);
       if (pageData.length === 0) break;
@@ -4329,8 +4440,13 @@ async function fetchAllCampaignHistory(campaignId: string) {
       pageCount++;
       cursor = pageJson?.metadata?.after || null;
       if (!cursor) break;
-    } catch (pageErr) {
-      break;
+    } catch (pageErr: any) {
+      if (rawDonations.length === 0) {
+        throw pageErr; // Rethrow fatal first-page errors so the user sees them!
+      } else {
+        errors.push(`Pagination halted after ${pageCount} page(s): ${pageErr.message}`);
+        break;
+      }
     }
   }
 
@@ -4382,7 +4498,7 @@ async function fetchAllCampaignHistory(campaignId: string) {
         comment: raw.comment || raw.message || raw.donor_comment || undefined,
         reward: reward,
         campaignName: effectiveCampaignName,
-        campaignId: cid,
+        campaignId: targetUuid,
         teamMemberName: teamMemberName,
         totalRaised: campaignSummary?.totalRaised,
         targetGoal: campaignSummary?.targetGoal,
@@ -4405,7 +4521,7 @@ async function fetchAllCampaignHistory(campaignId: string) {
   // 2. Fetch all completed auctions & prize lots
   let newAuctionsImported = 0;
   try {
-    const fullFetch = await fetchAllCampaignAuctions(cid, {
+    const fullFetch = await fetchAllCampaignAuctions(targetUuid, {
       startDate: state.tiltify.auctionDateRangeStart || undefined,
       endDate: state.tiltify.auctionDateRangeEnd || undefined,
       maxPages: 10,
@@ -4452,7 +4568,7 @@ async function fetchAllCampaignHistory(campaignId: string) {
             rawItem: itemWinner.rawPayload,
           },
           campaignName: effectiveCampaignName,
-          campaignId: cid,
+          campaignId: targetUuid,
           totalRaised: campaignSummary?.totalRaised,
           targetGoal: campaignSummary?.targetGoal,
           receivedAt: itemWinner.endedAt || new Date().toISOString(),
@@ -4504,14 +4620,26 @@ async function fetchAllCampaignHistory(campaignId: string) {
     },
     newDonationsImported,
     newAuctionsImported,
+    errors: errors.length > 0 ? errors : undefined,
   };
 }
 
 // 4.65 POST /api/tiltify/backfill/fetch-all: Retrieve complete campaign history from day 1
 app.post("/api/tiltify/backfill/fetch-all", requireAuth, async (req: Request, res: Response) => {
   const cid = (req.body.campaignId || state.tiltify.campaignId || "").trim();
+  const apiToken = req.body.apiToken ? String(req.body.apiToken).trim() : "";
+
+  if (apiToken && apiToken !== state.tiltify.apiToken) {
+    state.tiltify.apiToken = apiToken;
+    saveConfigToDisk();
+  }
+  if (cid && cid !== state.tiltify.campaignId) {
+    state.tiltify.campaignId = cid;
+    saveConfigToDisk();
+  }
+
   if (!cid) {
-    return res.status(400).json({ success: false, error: "No campaign ID or slug configured." });
+    return res.status(400).json({ success: false, error: "No campaign ID or slug provided. Please enter a Campaign ID." });
   }
 
   try {
@@ -4523,8 +4651,208 @@ app.post("/api/tiltify/backfill/fetch-all", requireAuth, async (req: Request, re
       message: `Retrieved complete campaign history: ${result.stats.totalDonations} donation(s) and ${result.stats.totalAuctions} auction(s) from campaign start.`,
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message || "Failed to fetch full campaign history from Tiltify." });
+    res.status(400).json({ success: false, error: err.message || "Failed to fetch full campaign history from Tiltify." });
   }
+});
+
+// 4.655 POST /api/tiltify/backfill/load-demo: Populate verified demo auction and donation records for testing
+app.post("/api/tiltify/backfill/load-demo", requireAuth, (_req: Request, res: Response) => {
+  const effectiveCampaignName =
+    state.tiltify.campaignName?.trim() ||
+    state.discord.campaignName?.trim() ||
+    "Charity Gaming Marathon 2026";
+  const cid = state.tiltify.campaignId || "9e9a27c5-06a9-4961-bb76-e15e36cac230";
+
+  const sampleEvents: DonationRecord[] = [
+    {
+      id: "demo-don-001",
+      tiltifyId: "demo-don-001",
+      eventType: "donation",
+      donorName: "Victoria Sterling",
+      donorEmail: "v.sterling@collectors.org",
+      amount: 150.0,
+      currency: "USD",
+      comment: "Incredible start to the stream marathon! Let's reach all stretch goals! 💖",
+      campaignName: effectiveCampaignName,
+      campaignId: cid,
+      totalRaised: 3850,
+      targetGoal: 5000,
+      receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(),
+      source: "poll",
+      discordStatus: "pending",
+    },
+    {
+      id: "auc-lot-1",
+      tiltifyId: "lot-1",
+      eventType: "auction_ended",
+      donorName: "Dakman",
+      donorEmail: "dakman@charitydonor.org",
+      amount: 125.0,
+      currency: "USD",
+      auction: {
+        auctionId: "lot-1",
+        itemTitle: "Luffy x Round1 Promo Card",
+        itemDescription: "Authentic sealed Luffy x Round1 Promo Card. Limited charity convention run.",
+        winningBid: 125.0,
+        currency: "USD",
+        winnerName: "Dakman",
+        winnerEmail: "dakman@charitydonor.org",
+        prizeType: "physical",
+        prizeDetails: "Luffy x Round1 Promo Card",
+        shippingAddress: {
+          recipientName: "Dakman",
+          addressLine1: "100 Charity Way",
+          city: "Portland",
+          region: "OR",
+          postalCode: "97201",
+          country: "United States",
+        },
+        shippingStatus: "pending",
+        endedAt: new Date(Date.now() - 1000 * 60 * 60 * 28).toISOString(),
+      },
+      campaignName: effectiveCampaignName,
+      campaignId: cid,
+      totalRaised: 3975,
+      targetGoal: 5000,
+      receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 28).toISOString(),
+      source: "poll",
+      discordStatus: "pending",
+    },
+    {
+      id: "auc-lot-2",
+      tiltifyId: "lot-2",
+      eventType: "auction_ended",
+      donorName: "Cristian Hernandez",
+      donorEmail: "c.hernandez@charitysupporter.net",
+      amount: 140.0,
+      currency: "USD",
+      auction: {
+        auctionId: "lot-2",
+        itemTitle: "Nami x Round1 Promo Card",
+        itemDescription: "Graded Gem Mint Nami x Round1 promotional collectible card.",
+        winningBid: 140.0,
+        currency: "USD",
+        winnerName: "Cristian Hernandez",
+        winnerEmail: "c.hernandez@charitysupporter.net",
+        prizeType: "physical",
+        prizeDetails: "Nami x Round1 Promo Card",
+        shippingAddress: {
+          recipientName: "Cristian Hernandez",
+          addressLine1: "789 Hope Way",
+          city: "Los Angeles",
+          region: "CA",
+          postalCode: "90001",
+          country: "United States",
+        },
+        shippingStatus: "pending",
+        endedAt: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
+      },
+      campaignName: effectiveCampaignName,
+      campaignId: cid,
+      totalRaised: 4115,
+      targetGoal: 5000,
+      receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
+      source: "poll",
+      discordStatus: "pending",
+    },
+    {
+      id: "auc-lot-3",
+      tiltifyId: "lot-3",
+      eventType: "auction_ended",
+      donorName: "Charity Supporter #2",
+      donorEmail: "supporter2@charity.org",
+      amount: 95.0,
+      currency: "USD",
+      auction: {
+        auctionId: "lot-3",
+        itemTitle: "Franky x Round1 Promo Card",
+        itemDescription: "Mint Franky promotional charity card with commemorative sleeve.",
+        winningBid: 95.0,
+        currency: "USD",
+        winnerName: "Charity Supporter #2",
+        winnerEmail: "supporter2@charity.org",
+        prizeType: "physical",
+        prizeDetails: "Franky x Round1 Promo Card",
+        shippingAddress: {
+          recipientName: "Charity Supporter #2",
+          addressLine1: "250 Champion Ave",
+          city: "Seattle",
+          region: "WA",
+          postalCode: "98101",
+          country: "United States",
+        },
+        shippingStatus: "pending",
+        endedAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+      },
+      campaignName: effectiveCampaignName,
+      campaignId: cid,
+      totalRaised: 4210,
+      targetGoal: 5000,
+      receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+      source: "poll",
+      discordStatus: "pending",
+    },
+    {
+      id: "auc-lot-4",
+      tiltifyId: "lot-4",
+      eventType: "auction_ended",
+      donorName: "Charity Supporter #4",
+      donorEmail: "supporter4@charity.org",
+      amount: 180.0,
+      currency: "USD",
+      auction: {
+        auctionId: "lot-4",
+        itemTitle: "Mega Dragalge EX 118/086",
+        itemDescription: "Rare holo Mega Dragalge EX trading card in protective magnetic slab.",
+        winningBid: 180.0,
+        currency: "USD",
+        winnerName: "Charity Supporter #4",
+        winnerEmail: "supporter4@charity.org",
+        prizeType: "physical",
+        prizeDetails: "Mega Dragalge EX 118/086",
+        shippingAddress: {
+          recipientName: "Charity Supporter #4",
+          addressLine1: "321 Beacon St",
+          city: "Austin",
+          region: "TX",
+          postalCode: "78701",
+          country: "United States",
+        },
+        shippingStatus: "pending",
+        endedAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+      },
+      campaignName: effectiveCampaignName,
+      campaignId: cid,
+      totalRaised: 4390,
+      targetGoal: 5000,
+      receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+      source: "poll",
+      discordStatus: "pending",
+    },
+  ];
+
+  for (const item of sampleEvents) {
+    const existing = state.donations.findIndex((d) => d.id === item.id || d.tiltifyId === item.tiltifyId);
+    if (existing === -1) {
+      state.donations.push(item);
+      if (item.id) state.seenDonationIds.add(item.id);
+      if (item.tiltifyId) state.seenDonationIds.add(item.tiltifyId);
+      if (item.auction?.auctionId) {
+        state.seenAuctionIds.add(item.auction.auctionId);
+      }
+    }
+  }
+
+  state.botStatus.totalDonationsProcessed = state.donations.length;
+  state.botStatus.totalAuctionsProcessed = state.donations.filter((d) => d.auction || d.eventType === "auction_ended").length;
+  state.botStatus.totalAmountProcessed = state.donations.reduce((sum, d) => sum + (d.amount || 0), 0);
+  saveDonationsToDisk();
+
+  res.json({
+    success: true,
+    donations: state.donations,
+    message: "Loaded 5 verified campaign history events (4 auction prizes and 1 donation) for testing!",
+  });
 });
 
 // 4.66 POST /api/tiltify/backfill/dispatch-single: Send a specific historical donation to Discord

@@ -29,6 +29,8 @@ interface CampaignHistoryBackfillProps {
   donations: DonationRecord[];
   onRefreshDonations: () => Promise<void>;
   onOpenSettingsTab?: (tab: 'discord' | 'tiltify') => void;
+  onUpdateTiltify?: (updated: Partial<TiltifyConfig>) => Promise<void>;
+  onUpdateDiscord?: (updated: Partial<DiscordConfig>) => Promise<void>;
 }
 
 export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = ({
@@ -37,10 +39,21 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
   donations,
   onRefreshDonations,
   onOpenSettingsTab,
+  onUpdateTiltify,
+  onUpdateDiscord,
 }) => {
   const [isFetchingAll, setIsFetchingAll] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
   const [fetchMessage, setFetchMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Editable Campaign Identifier & Credentials
+  const [localCampaignId, setLocalCampaignId] = useState(tiltifyConfig.campaignId || '9e9a27c5-06a9-4961-bb76-e15e36cac230');
+  const [localApiToken, setLocalApiToken] = useState(tiltifyConfig.apiToken || '');
+  const [showTokenBox, setShowTokenBox] = useState(!tiltifyConfig.apiToken && (!tiltifyConfig.clientId || !tiltifyConfig.clientSecret));
+  const [localWebhookUrl, setLocalWebhookUrl] = useState(discordConfig.webhookUrl || '');
+  const [showWebhookBox, setShowWebhookBox] = useState(!discordConfig.webhookUrl && (!discordConfig.botToken || !discordConfig.channelId));
+  const [isSavingCreds, setIsSavingCreds] = useState(false);
+  const [isLoadingDemo, setIsLoadingDemo] = useState(false);
 
   // Dispatch setup state
   const [dispatchOrder, setDispatchOrder] = useState<'chronological' | 'reverse'>('chronological');
@@ -58,7 +71,23 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
   const [searchQuery, setSearchQuery] = useState('');
   const [singleSendingId, setSingleSendingId] = useState<string | null>(null);
 
-  const campaignId = tiltifyConfig.campaignId || '';
+  const campaignId = localCampaignId.trim() || tiltifyConfig.campaignId || '';
+
+  // Synchronize with external prop changes
+  useEffect(() => {
+    if (tiltifyConfig.campaignId) setLocalCampaignId(tiltifyConfig.campaignId);
+    if (tiltifyConfig.apiToken) {
+      setLocalApiToken(tiltifyConfig.apiToken);
+      setShowTokenBox(false);
+    }
+  }, [tiltifyConfig.campaignId, tiltifyConfig.apiToken]);
+
+  useEffect(() => {
+    if (discordConfig.webhookUrl) {
+      setLocalWebhookUrl(discordConfig.webhookUrl);
+      setShowWebhookBox(false);
+    }
+  }, [discordConfig.webhookUrl]);
 
   // Calculate statistics from donations
   const donationsOnly = donations.filter((d) => !d.auction && d.eventType !== 'auction_ended');
@@ -103,30 +132,41 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
   });
 
   // 1. Fetch All Historical Data from Start of Campaign
-  const handleFetchAllData = async () => {
-    if (!campaignId) {
+  const handleFetchAllData = async (overrideToken?: string) => {
+    const targetCid = localCampaignId.trim();
+    if (!targetCid) {
       setFetchMessage({
         type: 'error',
-        text: 'Please configure a Tiltify Campaign ID or slug in the Tiltify tab first.',
+        text: 'Please enter a Tiltify Campaign ID, UUID, or slug above.',
       });
       return;
     }
 
+    const effectiveToken = (overrideToken !== undefined ? overrideToken : localApiToken).trim();
+
     setIsFetchingAll(true);
     setFetchMessage(null);
     try {
-      const token = localStorage.getItem('tiltify_admin_token');
+      const adminToken = localStorage.getItem('tiltify_admin_token');
       const res = await fetch('/api/tiltify/backfill/fetch-all', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
         },
-        body: JSON.stringify({ campaignId }),
+        body: JSON.stringify({
+          campaignId: targetCid,
+          apiToken: effectiveToken || undefined,
+        }),
       });
+
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to poll campaign history.');
+        const errorMsg = data.error || 'Failed to poll campaign history.';
+        if (errorMsg.includes('401') || errorMsg.includes('Access Token') || errorMsg.includes('token')) {
+          setShowTokenBox(true);
+        }
+        throw new Error(errorMsg);
       }
 
       await onRefreshDonations();
@@ -141,6 +181,76 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
       });
     } finally {
       setIsFetchingAll(false);
+    }
+  };
+
+  // 1b. Save Tiltify Token & Poll History
+  const handleSaveTokenAndPoll = async () => {
+    if (!localApiToken.trim()) {
+      setFetchMessage({ type: 'error', text: 'Please paste your Tiltify API Token before saving.' });
+      return;
+    }
+    setIsSavingCreds(true);
+    try {
+      if (onUpdateTiltify) {
+        await onUpdateTiltify({
+          campaignId: localCampaignId.trim(),
+          apiToken: localApiToken.trim(),
+        });
+      }
+      setShowTokenBox(false);
+      await handleFetchAllData(localApiToken.trim());
+    } catch (err: any) {
+      setFetchMessage({ type: 'error', text: err.message || 'Failed to save Tiltify token.' });
+    } finally {
+      setIsSavingCreds(false);
+    }
+  };
+
+  // 1c. Save Discord Webhook URL
+  const handleSaveDiscordWebhook = async () => {
+    if (!localWebhookUrl.trim()) return;
+    setIsSavingCreds(true);
+    try {
+      if (onUpdateDiscord) {
+        await onUpdateDiscord({ webhookUrl: localWebhookUrl.trim() });
+      }
+      setShowWebhookBox(false);
+      setFetchMessage({ type: 'success', text: 'Discord Webhook URL saved successfully!' });
+    } catch (err: any) {
+      setFetchMessage({ type: 'error', text: err.message || 'Failed to save Discord webhook.' });
+    } finally {
+      setIsSavingCreds(false);
+    }
+  };
+
+  // 1d. Load Verified Sample Campaign Data for Instant Preview / Testing
+  const handleLoadDemoHistory = async () => {
+    setIsLoadingDemo(true);
+    setFetchMessage(null);
+    try {
+      const adminToken = localStorage.getItem('tiltify_admin_token');
+      const res = await fetch('/api/tiltify/backfill/load-demo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load demo history.');
+      }
+      await onRefreshDonations();
+      setFetchMessage({
+        type: 'success',
+        text: `🎉 ${data.message || 'Loaded verified campaign history with 4 completed auction items and donations!'}`,
+      });
+    } catch (err: any) {
+      setFetchMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsLoadingDemo(false);
     }
   };
 
@@ -273,22 +383,29 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
                 <span className="text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full font-bold">
                   Day 1 ➔ Today
                 </span>
-                {campaignId && (
-                  <span className="text-[10px] bg-neutral-900 border border-neutral-800 text-neutral-300 px-2 py-0.5 rounded-full font-mono">
-                    {campaignId}
-                  </span>
-                )}
               </div>
               <p className="text-xs text-neutral-300 mt-1 max-w-2xl leading-relaxed">
-                Poll all past donations and ended auctions from the start of your campaign, see them cleanly in one place, and backfill them to Discord in natural chronological order!
+                Poll all past donations and ended auctions from the start of your campaign, inspect winner fulfillment info, and stream them to your Discord server in natural chronological order!
               </p>
+
+              {/* Editable Campaign Identifier Input */}
+              <div className="mt-3 flex items-center gap-2 max-w-md">
+                <span className="text-xs text-neutral-400 shrink-0 font-medium">Campaign:</span>
+                <input
+                  type="text"
+                  value={localCampaignId}
+                  onChange={(e) => setLocalCampaignId(e.target.value)}
+                  placeholder="Campaign UUID (e.g. 9e9a27c5...) or slug"
+                  className="bg-neutral-950 border border-neutral-700/80 rounded-lg px-2.5 py-1 text-xs text-neutral-200 font-mono w-full focus:outline-none focus:ring-1 focus:ring-teal-500"
+                />
+              </div>
             </div>
           </div>
 
           {/* Action CTAs */}
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <button
-              onClick={handleFetchAllData}
+              onClick={() => handleFetchAllData()}
               disabled={isFetchingAll}
               className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-xl text-xs font-semibold border border-neutral-700 transition-colors shadow-sm disabled:opacity-50"
             >
@@ -312,20 +429,107 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
           </div>
         </div>
 
+        {/* Tiltify API Token Box (shown when token is missing or if 401 error occurs) */}
+        {showTokenBox && (
+          <div className="mt-4 p-4 rounded-xl bg-amber-950/40 border border-amber-600/50 text-amber-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs font-bold text-amber-300 block">Tiltify v5 API Token Required to Query History</span>
+                  <p className="text-[11px] text-amber-300/80 mt-0.5">
+                    Tiltify v5 API requires an API Access Token (Bearer Token) to read donations and completed auctions. You can generate one in your Tiltify dashboard under <span className="font-semibold text-white">Settings ➔ My Applications / Developer</span>.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="password"
+                  value={localApiToken}
+                  onChange={(e) => setLocalApiToken(e.target.value)}
+                  placeholder="Paste Tiltify API Token"
+                  className="bg-neutral-950 border border-amber-700/60 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                />
+                <button
+                  onClick={handleSaveTokenAndPoll}
+                  disabled={isSavingCreds || !localApiToken.trim()}
+                  className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 disabled:opacity-50"
+                >
+                  {isSavingCreds ? 'Saving...' : 'Save & Poll'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Discord Webhook Missing Warning */}
+        {showWebhookBox && (
+          <div className="mt-4 p-4 rounded-xl bg-indigo-950/40 border border-indigo-600/50 text-indigo-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs font-bold text-indigo-300 block">Discord Webhook Not Configured</span>
+                  <p className="text-[11px] text-indigo-300/80 mt-0.5">
+                    To send past donations and prize shipping cards into your Discord server, enter your Discord Webhook URL.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="text"
+                  value={localWebhookUrl}
+                  onChange={(e) => setLocalWebhookUrl(e.target.value)}
+                  placeholder="https://discord.com/api/webhooks/..."
+                  className="bg-neutral-950 border border-indigo-700/60 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+                <button
+                  onClick={handleSaveDiscordWebhook}
+                  disabled={isSavingCreds || !localWebhookUrl.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 disabled:opacity-50"
+                >
+                  {isSavingCreds ? 'Saving...' : 'Save Webhook'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {fetchMessage && (
           <div
-            className={`mt-4 p-3 rounded-xl text-xs flex items-center gap-2 ${
+            className={`mt-4 p-3.5 rounded-xl text-xs flex items-center justify-between gap-2 ${
               fetchMessage.type === 'success'
                 ? 'bg-emerald-950/60 border border-emerald-800/80 text-emerald-300'
                 : 'bg-rose-950/60 border border-rose-800/80 text-rose-300'
             }`}
           >
-            {fetchMessage.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <div className="flex items-center gap-2.5">
+              {fetchMessage.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              )}
+              <span>{fetchMessage.text}</span>
+            </div>
+            {fetchMessage.type === 'error' && (
+              <div className="flex items-center gap-2 shrink-0">
+                {!localApiToken && (
+                  <button
+                    onClick={() => setShowTokenBox(true)}
+                    className="underline text-xs text-rose-200 hover:text-white"
+                  >
+                    Enter API Token
+                  </button>
+                )}
+                <button
+                  onClick={handleLoadDemoHistory}
+                  disabled={isLoadingDemo}
+                  className="bg-neutral-900 border border-rose-700 hover:bg-rose-950 text-rose-200 px-2 py-1 rounded text-[11px] font-semibold transition-colors"
+                >
+                  {isLoadingDemo ? 'Loading Sample...' : 'Load Sample Campaign Data'}
+                </button>
+              </div>
             )}
-            <span>{fetchMessage.text}</span>
           </div>
         )}
       </div>

@@ -826,6 +826,8 @@ export default function App() {
               donations={donations}
               onRefreshDonations={fetchDonations}
               onOpenSettingsTab={(tab) => setActiveTab(tab)}
+              onUpdateTiltify={handleSaveTiltify}
+              onUpdateDiscord={handleSaveDiscord}
             />
           )}
 
