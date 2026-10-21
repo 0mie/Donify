@@ -172,6 +172,12 @@ function saveConfigToDisk() {
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(toSave, null, 2), "utf-8");
 
+    // Also persist to root render-config.json and config.json (persists across git commits if checked in)
+    try {
+      fs.writeFileSync(path.join(process.cwd(), "render-config.json"), JSON.stringify(toSave, null, 2), "utf-8");
+      fs.writeFileSync(path.join(process.cwd(), "config.json"), JSON.stringify(toSave, null, 2), "utf-8");
+    } catch {}
+
     if (state.customAvatar?.buffer) {
       fs.writeFileSync(path.join(DATA_DIR, "custom-avatar.bin"), state.customAvatar.buffer);
     }
@@ -182,7 +188,7 @@ function saveConfigToDisk() {
       fs.writeFileSync(path.join(DATA_DIR, "custom-banner.bin"), state.customBanner.buffer);
     }
 
-    console.log("[Config Persistence] Saved configuration and assets to data/");
+    console.log("[Config Persistence] Saved configuration and assets to data/, render-config.json, and config.json");
   } catch (err: any) {
     console.error("[Config Persistence] Failed to save config to disk:", err.message);
   }
@@ -364,111 +370,221 @@ function loadDonationsFromDisk(): boolean {
   return false;
 }
 
+function applyConfigObject(parsed: any, sourceName: string) {
+  if (!parsed || typeof parsed !== "object") return;
+
+  if (parsed.adminPassword && typeof parsed.adminPassword === "string") {
+    state.adminPassword = parsed.adminPassword.trim();
+  }
+  if (parsed.discord && typeof parsed.discord === "object") {
+    state.discord = { ...state.discord, ...parsed.discord };
+  }
+  if (parsed.tiltify && typeof parsed.tiltify === "object") {
+    state.tiltify = { ...state.tiltify, ...parsed.tiltify };
+  }
+
+  // Handle flat env-style keys in JSON or .env
+  if (parsed.DISCORD_WEBHOOK_URL) state.discord.webhookUrl = String(parsed.DISCORD_WEBHOOK_URL).trim();
+  if (parsed.DISCORD_BOT_TOKEN) state.discord.botToken = String(parsed.DISCORD_BOT_TOKEN).trim();
+  if (parsed.DISCORD_CHANNEL_ID) state.discord.channelId = String(parsed.DISCORD_CHANNEL_ID).trim();
+  if (parsed.DISCORD_AUCTION_WEBHOOK_URL) state.discord.auctionWebhookUrl = String(parsed.DISCORD_AUCTION_WEBHOOK_URL).trim();
+  if (parsed.DISCORD_AUCTION_CHANNEL_ID) state.discord.auctionChannelId = String(parsed.DISCORD_AUCTION_CHANNEL_ID).trim();
+  if (parsed.DISCORD_SEPARATE_AUCTION_CHANNEL !== undefined) {
+    state.discord.separateAuctionChannel = parsed.DISCORD_SEPARATE_AUCTION_CHANNEL === true || parsed.DISCORD_SEPARATE_AUCTION_CHANNEL === "true";
+  }
+  if (parsed.DISCORD_AUCTION_SHIPPING_PRIVACY) {
+    state.discord.auctionShippingPrivacy = parsed.DISCORD_AUCTION_SHIPPING_PRIVACY;
+  }
+  if (parsed.DISCORD_DUAL_POST_AUCTIONS !== undefined) {
+    state.discord.dualPostAuctions = parsed.DISCORD_DUAL_POST_AUCTIONS === true || parsed.DISCORD_DUAL_POST_AUCTIONS === "true";
+  }
+  if (parsed.DISCORD_AUCTION_MENTION_TYPE) {
+    state.discord.auctionMentionType = parsed.DISCORD_AUCTION_MENTION_TYPE;
+  }
+  if (parsed.DISCORD_AUCTION_MENTION_ROLE_ID) {
+    state.discord.auctionMentionRoleId = String(parsed.DISCORD_AUCTION_MENTION_ROLE_ID).trim();
+  }
+  if (parsed.DISCORD_FOOTER_TEXT) state.discord.footerText = String(parsed.DISCORD_FOOTER_TEXT).trim();
+  if (parsed.TILTIFY_CAMPAIGN_ID) state.tiltify.campaignId = String(parsed.TILTIFY_CAMPAIGN_ID).trim();
+  if (parsed.TILTIFY_CAMPAIGN_NAME) state.tiltify.campaignName = String(parsed.TILTIFY_CAMPAIGN_NAME).trim();
+  if (parsed.TILTIFY_CLIENT_ID) state.tiltify.clientId = String(parsed.TILTIFY_CLIENT_ID).trim();
+  if (parsed.TILTIFY_CLIENT_SECRET) state.tiltify.clientSecret = String(parsed.TILTIFY_CLIENT_SECRET).trim();
+  if (parsed.TILTIFY_API_TOKEN) state.tiltify.apiToken = String(parsed.TILTIFY_API_TOKEN).trim();
+  if (parsed.ADMIN_PASSWORD) state.adminPassword = String(parsed.ADMIN_PASSWORD).trim();
+
+  // Handle embedded DONIFY_CONFIG
+  if (parsed.DONIFY_CONFIG) {
+    try {
+      const inner = typeof parsed.DONIFY_CONFIG === "string" ? JSON.parse(parsed.DONIFY_CONFIG) : parsed.DONIFY_CONFIG;
+      if (inner.discord) state.discord = { ...state.discord, ...inner.discord };
+      if (inner.tiltify) state.tiltify = { ...state.tiltify, ...inner.tiltify };
+      if (inner.adminPassword) state.adminPassword = inner.adminPassword;
+    } catch {}
+  }
+
+  console.log(`[Config Persistence] Loaded and merged settings from: ${sourceName}`);
+}
+
+function parseEnvString(content: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const lines = content.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx > 0) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 function loadConfigFromDisk() {
   try {
-    // 0. Support DONIFY_CONFIG environment variable (holds complete stringified JSON of all settings for Render)
+    // 0. Support DONIFY_CONFIG environment variable
     if (process.env.DONIFY_CONFIG) {
       try {
         const envConfig = JSON.parse(process.env.DONIFY_CONFIG);
-        if (envConfig.discord && typeof envConfig.discord === "object") {
-          state.discord = { ...state.discord, ...envConfig.discord };
-        }
-        if (envConfig.tiltify && typeof envConfig.tiltify === "object") {
-          state.tiltify = { ...state.tiltify, ...envConfig.tiltify };
-        }
-        if (envConfig.adminPassword && typeof envConfig.adminPassword === "string") {
-          state.adminPassword = envConfig.adminPassword;
-        }
-        console.log("[Config Persistence] Successfully applied configuration from DONIFY_CONFIG environment variable");
+        applyConfigObject(envConfig, "DONIFY_CONFIG env variable");
       } catch (err: any) {
         console.warn("[Config Persistence] Failed to parse DONIFY_CONFIG env variable:", err.message);
       }
     }
 
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (process.env.ADMIN_PASSWORD) {
-        state.adminPassword = process.env.ADMIN_PASSWORD.trim();
-      } else if (parsed.adminPassword && typeof parsed.adminPassword === "string") {
-        state.adminPassword = parsed.adminPassword;
-      }
+    // 1. Candidate paths to check in priority order:
+    //    Render Secret Files (/etc/secrets/), Project Root repo files, and data/app-config.json
+    const CANDIDATE_CONFIG_PATHS = [
+      // Render Secret Files (Survives git pushes on Render!)
+      "/etc/secrets/config.json",
+      "/etc/secrets/app-config.json",
+      "/etc/secrets/donify-config.json",
+      "/etc/secrets/donify.json",
+      "/etc/secrets/render-config.json",
+      "/etc/secrets/render.json",
+      "/etc/secrets/.env",
+      // Project root files (can be checked in to Git repository to survive redeploys!)
+      path.join(process.cwd(), "render-config.json"),
+      path.join(process.cwd(), "config.json"),
+      path.join(process.cwd(), "donify-config.json"),
+      path.join(process.cwd(), "donify.json"),
+      path.join(process.cwd(), ".env"),
+      // Local runtime storage
+      CONFIG_FILE,
+    ];
 
-      if (parsed.discord && typeof parsed.discord === "object") {
-        state.discord = {
-          ...state.discord,
-          ...parsed.discord,
-        };
-        // Environment variables always override file configuration for security
-        if (process.env.DISCORD_BOT_TOKEN) state.discord.botToken = process.env.DISCORD_BOT_TOKEN.trim();
-        if (process.env.DISCORD_CHANNEL_ID) state.discord.channelId = process.env.DISCORD_CHANNEL_ID.trim();
-        if (process.env.DISCORD_WEBHOOK_URL) state.discord.webhookUrl = process.env.DISCORD_WEBHOOK_URL.trim();
-        if (process.env.DISCORD_AUCTION_WEBHOOK_URL) state.discord.auctionWebhookUrl = process.env.DISCORD_AUCTION_WEBHOOK_URL.trim();
-        if (process.env.DISCORD_AUCTION_CHANNEL_ID) state.discord.auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID.trim();
-        if (process.env.DISCORD_SEPARATE_AUCTION_CHANNEL !== undefined) {
-          state.discord.separateAuctionChannel = process.env.DISCORD_SEPARATE_AUCTION_CHANNEL === "true";
-        }
-        if (process.env.DISCORD_AUCTION_SHIPPING_PRIVACY) {
-          state.discord.auctionShippingPrivacy = process.env.DISCORD_AUCTION_SHIPPING_PRIVACY as any;
-        }
-        if (process.env.DISCORD_DUAL_POST_AUCTIONS !== undefined) {
-          state.discord.dualPostAuctions = process.env.DISCORD_DUAL_POST_AUCTIONS === "true";
-        }
-        if (process.env.DISCORD_AUCTION_MENTION_TYPE) {
-          state.discord.auctionMentionType = process.env.DISCORD_AUCTION_MENTION_TYPE as any;
-        }
-        if (process.env.DISCORD_AUCTION_MENTION_ROLE_ID) {
-          state.discord.auctionMentionRoleId = process.env.DISCORD_AUCTION_MENTION_ROLE_ID.trim();
-        }
-      }
-      if (parsed.tiltify && typeof parsed.tiltify === "object") {
-        state.tiltify = {
-          ...state.tiltify,
-          ...parsed.tiltify,
-        };
-        // Environment variables always override file configuration for security
-        if (process.env.TILTIFY_CLIENT_ID) state.tiltify.clientId = process.env.TILTIFY_CLIENT_ID.trim();
-        if (process.env.TILTIFY_CLIENT_SECRET) state.tiltify.clientSecret = process.env.TILTIFY_CLIENT_SECRET.trim();
-        if (process.env.TILTIFY_API_TOKEN) state.tiltify.apiToken = process.env.TILTIFY_API_TOKEN.trim();
-        if (process.env.TILTIFY_CAMPAIGN_ID) state.tiltify.campaignId = process.env.TILTIFY_CAMPAIGN_ID.trim();
-      }
+    for (const filePath of CANDIDATE_CONFIG_PATHS) {
+      try {
+        if (fs.existsSync(filePath)) {
+          const raw = fs.readFileSync(filePath, "utf-8");
+          if (filePath.endsWith(".env")) {
+            const parsedEnv = parseEnvString(raw);
+            applyConfigObject(parsedEnv, filePath);
+          } else {
+            const parsed = JSON.parse(raw);
+            applyConfigObject(parsed, filePath);
 
-      // Restore custom images from disk binaries
-      if (parsed.customAvatarMeta && fs.existsSync(path.join(DATA_DIR, "custom-avatar.bin"))) {
-        state.customAvatar = {
-          buffer: fs.readFileSync(path.join(DATA_DIR, "custom-avatar.bin")),
-          contentType: parsed.customAvatarMeta.contentType,
-          fileName: parsed.customAvatarMeta.fileName,
-          updatedAt: parsed.customAvatarMeta.updatedAt,
-        };
+            // Restore custom images from disk binaries if present alongside
+            const dir = path.dirname(filePath);
+            if (parsed.customAvatarMeta && fs.existsSync(path.join(dir, "custom-avatar.bin"))) {
+              state.customAvatar = {
+                buffer: fs.readFileSync(path.join(dir, "custom-avatar.bin")),
+                contentType: parsed.customAvatarMeta.contentType,
+                fileName: parsed.customAvatarMeta.fileName,
+                updatedAt: parsed.customAvatarMeta.updatedAt,
+              };
+            }
+            if (parsed.customThumbnailMeta && fs.existsSync(path.join(dir, "custom-thumbnail.bin"))) {
+              state.customThumbnail = {
+                buffer: fs.readFileSync(path.join(dir, "custom-thumbnail.bin")),
+                contentType: parsed.customThumbnailMeta.contentType,
+                fileName: parsed.customThumbnailMeta.fileName,
+                updatedAt: parsed.customThumbnailMeta.updatedAt,
+              };
+            }
+            if (parsed.customBannerMeta && fs.existsSync(path.join(dir, "custom-banner.bin"))) {
+              state.customBanner = {
+                buffer: fs.readFileSync(path.join(dir, "custom-banner.bin")),
+                contentType: parsed.customBannerMeta.contentType,
+                fileName: parsed.customBannerMeta.fileName,
+                updatedAt: parsed.customBannerMeta.updatedAt,
+              };
+            }
+          }
+        }
+      } catch (fileErr: any) {
+        // Continue checking other candidates
       }
-      if (parsed.customThumbnailMeta && fs.existsSync(path.join(DATA_DIR, "custom-thumbnail.bin"))) {
-        state.customThumbnail = {
-          buffer: fs.readFileSync(path.join(DATA_DIR, "custom-thumbnail.bin")),
-          contentType: parsed.customThumbnailMeta.contentType,
-          fileName: parsed.customThumbnailMeta.fileName,
-          updatedAt: parsed.customThumbnailMeta.updatedAt,
-        };
-      }
-      if (parsed.customBannerMeta && fs.existsSync(path.join(DATA_DIR, "custom-banner.bin"))) {
-        state.customBanner = {
-          buffer: fs.readFileSync(path.join(DATA_DIR, "custom-banner.bin")),
-          contentType: parsed.customBannerMeta.contentType,
-          fileName: parsed.customBannerMeta.fileName,
-          updatedAt: parsed.customBannerMeta.updatedAt,
-        };
-      }
-
-      state.botStatus.discordConfigured = Boolean(
-        state.discord.webhookUrl || (state.discord.botToken && state.discord.channelId)
-      );
-      state.botStatus.tiltifyConfigured = Boolean(
-        state.tiltify.campaignId ||
-          state.tiltify.apiToken ||
-          (state.tiltify.clientId && state.tiltify.clientSecret)
-      );
-      console.log("[Config Persistence] Successfully restored configuration from data/app-config.json");
     }
+
+    // Check data/ dir for assets if not yet loaded
+    if (!state.customAvatar && fs.existsSync(path.join(DATA_DIR, "custom-avatar.bin"))) {
+      state.customAvatar = {
+        buffer: fs.readFileSync(path.join(DATA_DIR, "custom-avatar.bin")),
+        contentType: "image/png",
+        fileName: "custom-avatar.png",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (!state.customThumbnail && fs.existsSync(path.join(DATA_DIR, "custom-thumbnail.bin"))) {
+      state.customThumbnail = {
+        buffer: fs.readFileSync(path.join(DATA_DIR, "custom-thumbnail.bin")),
+        contentType: "image/png",
+        fileName: "custom-thumbnail.png",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (!state.customBanner && fs.existsSync(path.join(DATA_DIR, "custom-banner.bin"))) {
+      state.customBanner = {
+        buffer: fs.readFileSync(path.join(DATA_DIR, "custom-banner.bin")),
+        contentType: "image/png",
+        fileName: "custom-banner.png",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    // 2. Active Environment Variables always take highest precedence for security & Render overrides
+    if (process.env.ADMIN_PASSWORD) state.adminPassword = process.env.ADMIN_PASSWORD.trim();
+    if (process.env.DISCORD_BOT_TOKEN) state.discord.botToken = process.env.DISCORD_BOT_TOKEN.trim();
+    if (process.env.DISCORD_CHANNEL_ID) state.discord.channelId = process.env.DISCORD_CHANNEL_ID.trim();
+    if (process.env.DISCORD_WEBHOOK_URL) state.discord.webhookUrl = process.env.DISCORD_WEBHOOK_URL.trim();
+    if (process.env.DISCORD_AUCTION_WEBHOOK_URL) state.discord.auctionWebhookUrl = process.env.DISCORD_AUCTION_WEBHOOK_URL.trim();
+    if (process.env.DISCORD_AUCTION_CHANNEL_ID) state.discord.auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID.trim();
+    if (process.env.DISCORD_SEPARATE_AUCTION_CHANNEL !== undefined) {
+      state.discord.separateAuctionChannel = process.env.DISCORD_SEPARATE_AUCTION_CHANNEL === "true";
+    }
+    if (process.env.DISCORD_AUCTION_SHIPPING_PRIVACY) {
+      state.discord.auctionShippingPrivacy = process.env.DISCORD_AUCTION_SHIPPING_PRIVACY as any;
+    }
+    if (process.env.DISCORD_DUAL_POST_AUCTIONS !== undefined) {
+      state.discord.dualPostAuctions = process.env.DISCORD_DUAL_POST_AUCTIONS === "true";
+    }
+    if (process.env.DISCORD_AUCTION_MENTION_TYPE) {
+      state.discord.auctionMentionType = process.env.DISCORD_AUCTION_MENTION_TYPE as any;
+    }
+    if (process.env.DISCORD_AUCTION_MENTION_ROLE_ID) {
+      state.discord.auctionMentionRoleId = process.env.DISCORD_AUCTION_MENTION_ROLE_ID.trim();
+    }
+    if (process.env.DISCORD_FOOTER_TEXT) state.discord.footerText = process.env.DISCORD_FOOTER_TEXT.trim();
+    if (process.env.TILTIFY_CLIENT_ID) state.tiltify.clientId = process.env.TILTIFY_CLIENT_ID.trim();
+    if (process.env.TILTIFY_CLIENT_SECRET) state.tiltify.clientSecret = process.env.TILTIFY_CLIENT_SECRET.trim();
+    if (process.env.TILTIFY_API_TOKEN) state.tiltify.apiToken = process.env.TILTIFY_API_TOKEN.trim();
+    if (process.env.TILTIFY_CAMPAIGN_ID) state.tiltify.campaignId = process.env.TILTIFY_CAMPAIGN_ID.trim();
+    if (process.env.TILTIFY_CAMPAIGN_NAME) state.tiltify.campaignName = process.env.TILTIFY_CAMPAIGN_NAME.trim();
+
+    state.botStatus.discordConfigured = Boolean(
+      state.discord.webhookUrl || (state.discord.botToken && state.discord.channelId)
+    );
+    state.botStatus.tiltifyConfigured = Boolean(
+      state.tiltify.campaignId ||
+        state.tiltify.apiToken ||
+        (state.tiltify.clientId && state.tiltify.clientSecret)
+    );
+    console.log("[Config Persistence] Configuration loaded. Discord configured:", state.botStatus.discordConfigured, "Tiltify campaign:", state.tiltify.campaignId || "(none)");
   } catch (err: any) {
     console.warn("[Config Persistence] Could not load saved config from disk:", err.message);
   }
@@ -4177,6 +4293,362 @@ app.post("/api/tiltify/dispatch-prizes", requireAuth, async (req: Request, res: 
     failedCount,
     errors: errors.length > 0 ? errors : undefined,
     message: `Dispatched ${sentCount} individual prize shipping card(s) to Discord.${failedCount > 0 ? ` (${failedCount} failed)` : ""}`,
+  });
+});
+
+// ---------------------------------------------------------------------
+// 🚀 CAMPAIGN HISTORY & DISCORD BACKFILL ENGINE
+// ---------------------------------------------------------------------
+
+// Helper: Query all pages of donations & auctions from campaign start
+async function fetchAllCampaignHistory(campaignId: string) {
+  const cid = campaignId.trim();
+  const campaignSummary = await fetchLiveCampaignSummary(cid, true);
+  await refreshCampaignRewards(cid);
+
+  const getHeaders = () => {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (state.tiltify.apiToken) headers["Authorization"] = `Bearer ${state.tiltify.apiToken.trim()}`;
+    return headers;
+  };
+
+  // 1. Paginate through all donations from Tiltify API v5
+  let cursor: string | null = null;
+  let pageCount = 0;
+  const rawDonations: any[] = [];
+
+  while (pageCount < 10) {
+    const pageUrl: string = `https://v5api.tiltify.com/api/public/campaigns/${cid}/donations?limit=100${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`;
+    try {
+      const pageRes: any = await fetch(pageUrl, { headers: getHeaders() });
+      if (!pageRes.ok) break;
+      const pageJson: any = await pageRes.json();
+      const pageData = Array.isArray(pageJson?.data) ? pageJson.data : (Array.isArray(pageJson) ? pageJson : []);
+      if (pageData.length === 0) break;
+      rawDonations.push(...pageData);
+      pageCount++;
+      cursor = pageJson?.metadata?.after || null;
+      if (!cursor) break;
+    } catch (pageErr) {
+      break;
+    }
+  }
+
+  const effectiveCampaignName =
+    state.tiltify.campaignName?.trim() ||
+    state.discord.campaignName?.trim() ||
+    campaignSummary?.campaignName ||
+    "Tiltify Campaign";
+
+  let newDonationsImported = 0;
+
+  // Process raw donations
+  for (const raw of rawDonations) {
+    const donationId = String(raw.id || raw.public_id || `tilt-${Date.now()}`);
+
+    let amountVal = 0;
+    let currencyVal = "USD";
+    if (typeof raw.amount === "object" && raw.amount !== null) {
+      amountVal = parseFloat(raw.amount.value || raw.amount.amount || "0");
+      currencyVal = raw.amount.currency || "USD";
+    } else if (typeof raw.amount === "number" || typeof raw.amount === "string") {
+      amountVal = parseFloat(String(raw.amount));
+    }
+
+    if (isNaN(amountVal) || amountVal <= 0) continue;
+
+    const existingIndex = state.donations.findIndex((d) => d.id === donationId || d.tiltifyId === donationId);
+    const { donorEmail, reward } = extractRewardAndDelivery(raw, state.campaignRewardsCache);
+
+    let extractedDonor = (raw.donor_name || "").trim();
+    if (!extractedDonor && raw.name) extractedDonor = String(raw.name).trim();
+    if (!extractedDonor) extractedDonor = "Anonymous Supporter";
+
+    const rawSupporting = raw.supporting_campaign || raw.team_member || raw.member;
+    const teamMemberName =
+      (typeof rawSupporting === "object" ? (rawSupporting.user?.name || rawSupporting.name || rawSupporting.title) : undefined) ||
+      raw.team_member_name ||
+      undefined;
+
+    if (existingIndex === -1) {
+      const newDonation: DonationRecord = {
+        id: donationId,
+        tiltifyId: donationId,
+        eventType: "donation",
+        donorName: extractedDonor,
+        donorEmail: donorEmail,
+        amount: amountVal,
+        currency: currencyVal,
+        comment: raw.comment || raw.message || raw.donor_comment || undefined,
+        reward: reward,
+        campaignName: effectiveCampaignName,
+        campaignId: cid,
+        teamMemberName: teamMemberName,
+        totalRaised: campaignSummary?.totalRaised,
+        targetGoal: campaignSummary?.targetGoal,
+        receivedAt: raw.completed_at || raw.created_at || new Date().toISOString(),
+        source: "poll",
+        discordStatus: "pending", // Mark as pending so user can choose to backfill to Discord
+        rawPayload: raw,
+      };
+      state.donations.push(newDonation);
+      state.seenDonationIds.add(donationId);
+      newDonationsImported++;
+    } else {
+      // Enrich existing with reward / email if missing
+      const existing = state.donations[existingIndex];
+      if (!existing.reward && reward) existing.reward = reward;
+      if (!existing.donorEmail && donorEmail) existing.donorEmail = donorEmail;
+    }
+  }
+
+  // 2. Fetch all completed auctions & prize lots
+  let newAuctionsImported = 0;
+  try {
+    const fullFetch = await fetchAllCampaignAuctions(cid, {
+      startDate: state.tiltify.auctionDateRangeStart || undefined,
+      endDate: state.tiltify.auctionDateRangeEnd || undefined,
+      maxPages: 10,
+    });
+
+    for (const itemWinner of fullFetch.auctions) {
+      const aucId = itemWinner.itemId;
+      const isEnded = itemWinner.status === "completed" || Boolean(itemWinner.endedAt && new Date(itemWinner.endedAt).getTime() <= Date.now());
+      if (!isEnded) continue;
+      if (!itemWinner.winningBid || itemWinner.winningBid <= 0) continue;
+
+      let resolvedAddress = itemWinner.shippingAddress;
+      let resolvedEmail = itemWinner.winnerEmail;
+      if (isSurveyPlaceholder(resolvedAddress)) resolvedAddress = undefined;
+      if (isSurveyPlaceholder(resolvedEmail)) resolvedEmail = undefined;
+
+      const existingAuctionIndex = state.donations.findIndex(
+        (d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId || d.auction?.auctionId === aucId
+      );
+
+      if (existingAuctionIndex === -1) {
+        const auctionRecord: DonationRecord = {
+          id: `auc-${aucId}`,
+          tiltifyId: aucId,
+          eventType: "auction_ended",
+          donorName: itemWinner.winnerName || "Auction Winner",
+          donorEmail: resolvedEmail,
+          amount: itemWinner.winningBid,
+          currency: itemWinner.currency,
+          auction: {
+            auctionId: itemWinner.itemId,
+            itemTitle: itemWinner.itemTitle,
+            itemDescription: itemWinner.itemDescription,
+            winningBid: itemWinner.winningBid,
+            currency: itemWinner.currency,
+            winnerName: itemWinner.winnerName,
+            winnerEmail: resolvedEmail,
+            endedAt: itemWinner.endedAt,
+            prizeType: itemWinner.prizeType || "physical",
+            prizeDetails: itemWinner.itemTitle,
+            shippingAddress: resolvedAddress,
+            specialInstructions: itemWinner.specialInstructions,
+            shippingStatus: "pending",
+            rawItem: itemWinner.rawPayload,
+          },
+          campaignName: effectiveCampaignName,
+          campaignId: cid,
+          totalRaised: campaignSummary?.totalRaised,
+          targetGoal: campaignSummary?.targetGoal,
+          receivedAt: itemWinner.endedAt || new Date().toISOString(),
+          source: "poll",
+          discordStatus: "pending",
+          rawPayload: itemWinner.rawPayload,
+        };
+        state.donations.push(auctionRecord);
+        state.seenAuctionIds.add(aucId);
+        newAuctionsImported++;
+      }
+    }
+  } catch (aucErr: any) {
+    console.warn("[Backfill Engine] Auction fetch note:", aucErr.message);
+  }
+
+  // Anchor totalAmountProcessed to authoritative summary
+  if (campaignSummary && typeof campaignSummary.totalRaised === "number" && campaignSummary.totalRaised > 0) {
+    state.botStatus.totalAmountProcessed = campaignSummary.totalRaised;
+  }
+  state.botStatus.totalDonationsProcessed = state.donations.length;
+  saveDonationsToDisk();
+
+  // Calculate comprehensive backfill statistics
+  const donationsOnly = state.donations.filter((d) => !d.auction && d.eventType !== "auction_ended");
+  const auctionsOnly = state.donations.filter((d) => Boolean(d.auction) || d.eventType === "auction_ended");
+  const unsentCount = state.donations.filter((d) => d.discordStatus !== "sent").length;
+  const sentCount = state.donations.filter((d) => d.discordStatus === "sent").length;
+
+  // Find date range
+  const validTimestamps = state.donations
+    .map((d) => new Date(d.receivedAt).getTime())
+    .filter((t) => !isNaN(t))
+    .sort((a, b) => a - b);
+
+  const earliestDate = validTimestamps.length > 0 ? new Date(validTimestamps[0]).toISOString() : null;
+  const latestDate = validTimestamps.length > 0 ? new Date(validTimestamps[validTimestamps.length - 1]).toISOString() : null;
+
+  return {
+    donations: state.donations,
+    stats: {
+      totalDonations: donationsOnly.length,
+      totalAuctions: auctionsOnly.length,
+      totalAmount: state.botStatus.totalAmountProcessed,
+      unsentCount,
+      sentCount,
+      earliestDate,
+      latestDate,
+    },
+    newDonationsImported,
+    newAuctionsImported,
+  };
+}
+
+// 4.65 POST /api/tiltify/backfill/fetch-all: Retrieve complete campaign history from day 1
+app.post("/api/tiltify/backfill/fetch-all", requireAuth, async (req: Request, res: Response) => {
+  const cid = (req.body.campaignId || state.tiltify.campaignId || "").trim();
+  if (!cid) {
+    return res.status(400).json({ success: false, error: "No campaign ID or slug configured." });
+  }
+
+  try {
+    const result = await fetchAllCampaignHistory(cid);
+    res.json({
+      success: true,
+      stats: result.stats,
+      donations: state.donations,
+      message: `Retrieved complete campaign history: ${result.stats.totalDonations} donation(s) and ${result.stats.totalAuctions} auction(s) from campaign start.`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to fetch full campaign history from Tiltify." });
+  }
+});
+
+// 4.66 POST /api/tiltify/backfill/dispatch-single: Send a specific historical donation to Discord
+app.post("/api/tiltify/backfill/dispatch-single", requireAuth, async (req: Request, res: Response) => {
+  const { id } = req.body;
+  const target = state.donations.find((d) => d.id === id || d.tiltifyId === id);
+  if (!target) {
+    return res.status(404).json({ success: false, error: "Event record not found." });
+  }
+
+  const result = await dispatchDiscordAlert(target, state.discord);
+  target.discordStatus = result.success ? "sent" : "failed";
+  target.discordError = result.error;
+  saveDonationsToDisk();
+
+  res.json({
+    success: result.success,
+    donation: target,
+    error: result.error,
+    message: result.success ? "Alert delivered to Discord!" : `Discord delivery failed: ${result.error}`,
+  });
+});
+
+// 4.67 POST /api/tiltify/backfill/dispatch-all: Send all past campaign donations & auctions to Discord in natural chronological order
+app.post("/api/tiltify/backfill/dispatch-all", requireAuth, async (req: Request, res: Response) => {
+  const {
+    order = "chronological", // 'chronological' (oldest first) or 'reverse' (newest first)
+    filter = "all",          // 'all' | 'donations' | 'auctions'
+    onlyUnsent = true,
+    delayMs = 1000,          // Respect Discord rate limits (1 second per alert)
+  } = req.body;
+
+  let candidates = state.donations.filter((d) => {
+    const isAuction = Boolean(d.auction) || d.eventType === "auction_ended";
+    if (filter === "donations" && isAuction) return false;
+    if (filter === "auctions" && !isAuction) return false;
+    if (onlyUnsent && d.discordStatus === "sent") return false;
+    return true;
+  });
+
+  // Sort candidate events:
+  // 'chronological': Oldest first (Date ascending) -> natural stream history so Discord chat scrolls chronologically!
+  // 'reverse': Newest first (Date descending)
+  candidates.sort((a, b) => {
+    const timeA = new Date(a.receivedAt).getTime();
+    const timeB = new Date(b.receivedAt).getTime();
+    return order === "chronological" ? timeA - timeB : timeB - timeA;
+  });
+
+  if (candidates.length === 0) {
+    return res.json({
+      success: true,
+      dispatchedCount: 0,
+      failedCount: 0,
+      total: 0,
+      message: "No matching items found to dispatch (all may already be marked as sent).",
+    });
+  }
+
+  let dispatchedCount = 0;
+  let failedCount = 0;
+  const results: any[] = [];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const item = candidates[i];
+    const dispatchResult = await dispatchDiscordAlert(item, state.discord);
+    if (dispatchResult.success) {
+      item.discordStatus = "sent";
+      item.discordError = undefined;
+      dispatchedCount++;
+    } else {
+      item.discordStatus = "failed";
+      item.discordError = dispatchResult.error;
+      failedCount++;
+    }
+
+    results.push({
+      id: item.id,
+      name: item.donorName,
+      amount: item.amount,
+      success: dispatchResult.success,
+      error: dispatchResult.error,
+    });
+
+    // Pacing delay between webhook posts to ensure Discord 429 rate limit is never exceeded
+    if (i < candidates.length - 1 && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, Math.min(Math.max(delayMs, 500), 3000)));
+    }
+  }
+
+  saveDonationsToDisk();
+
+  res.json({
+    success: dispatchedCount > 0 || failedCount === 0,
+    dispatchedCount,
+    failedCount,
+    total: candidates.length,
+    results,
+    message: `Dispatched ${dispatchedCount} past event(s) to Discord in ${order === "chronological" ? "chronological order (oldest first)" : "reverse order"}.${failedCount > 0 ? ` (${failedCount} failed)` : ""}`,
+  });
+});
+
+// 4.68 GET /api/config/render-file: Export config file format for Render secret file or GitHub repo
+app.get("/api/config/render-file", (req: Request, res: Response) => {
+  const payload = {
+    adminPassword: state.adminPassword,
+    discord: state.discord,
+    tiltify: state.tiltify,
+  };
+  res.json({
+    filename: "render-config.json",
+    secretFilename: "config.json",
+    secretPath: "/etc/secrets/config.json",
+    config: payload,
+    content: JSON.stringify(payload, null, 2),
+    envContent: [
+      `DISCORD_WEBHOOK_URL=${state.discord.webhookUrl || ""}`,
+      `TILTIFY_CAMPAIGN_ID=${state.tiltify.campaignId || ""}`,
+      state.discord.separateAuctionChannel ? `DISCORD_SEPARATE_AUCTION_CHANNEL=true` : "",
+      state.discord.auctionWebhookUrl ? `DISCORD_AUCTION_WEBHOOK_URL=${state.discord.auctionWebhookUrl}` : "",
+      state.tiltify.clientId ? `TILTIFY_CLIENT_ID=${state.tiltify.clientId}` : "",
+      state.tiltify.clientSecret ? `TILTIFY_CLIENT_SECRET=${state.tiltify.clientSecret}` : "",
+      state.adminPassword ? `ADMIN_PASSWORD=${state.adminPassword}` : "",
+    ].filter(Boolean).join("\n"),
   });
 });
 

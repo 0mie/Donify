@@ -9,8 +9,9 @@ import { SetupGuideModal } from './components/SetupGuideModal';
 import { AdminLockModal } from './components/AdminLockModal';
 import { BackupModal } from './components/BackupModal';
 import { RenderSimplifierModal } from './components/RenderSimplifierModal';
+import { CampaignHistoryBackfill } from './components/CampaignHistoryBackfill';
 import { DiscordConfig, TiltifyConfig, DonationRecord, BotStatus, ClaimedReward, AuctionWinnerInfo } from './types';
-import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw, Package, Sparkles, HardDrive, Calendar } from 'lucide-react';
+import { Bot, Radio, Zap, HeartHandshake, DollarSign, Activity, CheckCircle2, ShieldCheck, ShieldAlert, RefreshCw, Package, Sparkles, HardDrive, Calendar, History } from 'lucide-react';
 
 const CONFIG_STORAGE_KEY = 'tiltify_bot_saved_config_v1';
 
@@ -32,7 +33,7 @@ function getLocalConfigBackup(): { discord?: Partial<DiscordConfig>; tiltify?: P
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'prizes' | 'feed' | 'simulator'>('discord');
+  const [activeTab, setActiveTab] = useState<'discord' | 'tiltify' | 'history' | 'prizes' | 'feed' | 'simulator'>('discord');
   const [guideOpen, setGuideOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [renderSimplifierOpen, setRenderSimplifierOpen] = useState(false);
@@ -735,6 +736,23 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('history')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+              activeTab === 'history'
+                ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
+            }`}
+          >
+            <History className="w-4 h-4 text-emerald-400" />
+            <span>Campaign History &amp; Catch-Up</span>
+            {donations.filter((d) => d.discordStatus === 'pending' || d.discordStatus === 'failed').length > 0 && (
+              <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                {donations.filter((d) => d.discordStatus === 'pending' || d.discordStatus === 'failed').length} unsent
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('prizes')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
               activeTab === 'prizes'
@@ -797,6 +815,17 @@ export default function App() {
               onSave={handleSaveTiltify}
               onPollNow={handlePollNow}
               onOpenRenderSimplifier={() => setRenderSimplifierOpen(true)}
+              onGoToHistory={() => setActiveTab('history')}
+            />
+          )}
+
+          {activeTab === 'history' && (
+            <CampaignHistoryBackfill
+              tiltifyConfig={tiltifyConfig}
+              discordConfig={discordConfig}
+              donations={donations}
+              onRefreshDonations={fetchDonations}
+              onOpenSettingsTab={(tab) => setActiveTab(tab)}
             />
           )}
 
@@ -810,6 +839,7 @@ export default function App() {
               onResend={handleResendDonation}
               onClear={handleClearDonations}
               isLoading={isLoading}
+              onGoToHistory={() => setActiveTab('history')}
             />
           )}
 

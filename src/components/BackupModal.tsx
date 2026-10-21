@@ -184,36 +184,105 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           </div>
         </div>
 
-        {/* File Backup (Download / Upload / Commit to Git) */}
-        <div className="border-t border-neutral-800 pt-4 space-y-3">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-xs text-neutral-400 text-center sm:text-left">
-              <span className="font-semibold text-neutral-200 block">Git Zero-Config Option (No Render Settings Needed):</span>
-              Commit <code className="text-teal-400 bg-neutral-950 px-1 py-0.5 rounded font-mono">data/app-config.json</code> directly to your GitHub repo so Render boots with your settings pre-baked.
+        {/* Render Secret File & Permanent Repo Config */}
+        <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 font-semibold text-white">
+              <HardDrive className="w-4 h-4 text-teal-400" />
+              <span>Permanent Render File Setup (Survives 100% of Git Pushes)</span>
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
-              <button
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify({ adminPassword: '', discord: discordConfig, tiltify: tiltifyConfig }, null, 2)], {
-                    type: 'application/json',
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'app-config.json';
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                }}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-teal-900/60 hover:bg-teal-800/70 text-teal-200 border border-teal-700/60 px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
-                title="Save this file as data/app-config.json and push to GitHub"
-              >
-                <Download className="w-3.5 h-3.5 text-teal-400" />
-                <span>Save app-config.json for Git</span>
-              </button>
+            <span className="text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded font-mono font-bold">
+              Zero Reset Guarantee
+            </span>
+          </div>
+
+          <p className="text-neutral-400 leading-relaxed">
+            Render resets ephemeral disk files when you push new code to GitHub. To make Render remember your settings forever, use either of these 2 permanent methods:
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            {/* Method 1: Render Secret File */}
+            <div className="bg-neutral-900/90 border border-neutral-800 p-3 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white text-xs">Method 1: Render Secret File</span>
+                <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded font-mono">
+                  Recommended
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-400 leading-snug">
+                In Render Dashboard ➔ <strong>Environment</strong> ➔ scroll to <strong>Secret Files</strong> ➔ Add file named <code className="text-teal-300 font-mono">config.json</code>. Render saves it permanently at <code className="text-neutral-300 font-mono">/etc/secrets/config.json</code>!
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify({ adminPassword: '', discord: discordConfig, tiltify: tiltifyConfig }, null, 2)], {
+                      type: 'application/json',
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'config.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex-1 bg-teal-900/60 hover:bg-teal-800 text-teal-200 border border-teal-700/60 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Download config.json</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopy('secretFileJson', JSON.stringify({ adminPassword: '', discord: discordConfig, tiltify: tiltifyConfig }, null, 2))}
+                  className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 py-1.5 px-2.5 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1 transition-colors"
+                >
+                  {copiedKey === 'secretFileJson' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedKey === 'secretFileJson' ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Method 2: Commit render-config.json to Git */}
+            <div className="bg-neutral-900/90 border border-neutral-800 p-3 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white text-xs">Method 2: Commit to GitHub Repo</span>
+                <span className="text-[9px] bg-neutral-800 text-neutral-300 px-1.5 py-0.2 rounded font-mono">
+                  Git Versioned
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-400 leading-snug">
+                Download <code className="text-teal-300 font-mono">render-config.json</code> and commit it to the root of your GitHub repository. Every push will deploy with your settings pre-baked!
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify({ adminPassword: '', discord: discordConfig, tiltify: tiltifyConfig }, null, 2)], {
+                      type: 'application/json',
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'render-config.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="w-full bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Download render-config.json</span>
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+
+        {/* File Backup (Download / Upload / Commit to Git) */}
+        <div className="border-t border-neutral-800 pt-4 space-y-3">
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-neutral-800/60">
             <div className="text-xs text-neutral-400 text-center sm:text-left">

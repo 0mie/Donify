@@ -39,6 +39,7 @@ interface TiltifyConfigCardProps {
   onSave: (updated: Partial<TiltifyConfig>) => Promise<void>;
   onPollNow: () => Promise<{ success: boolean; message: string; count: number }>;
   onOpenRenderSimplifier?: () => void;
+  onGoToHistory?: () => void;
 }
 
 export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
@@ -47,6 +48,7 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
   onSave,
   onPollNow,
   onOpenRenderSimplifier,
+  onGoToHistory,
 }) => {
   const [localConfig, setLocalConfig] = useState<TiltifyConfig>(config);
   const [isSaving, setIsSaving] = useState(false);
@@ -1073,6 +1075,27 @@ export const TiltifyConfigCard: React.FC<TiltifyConfigCardProps> = ({
                     Historical Pull
                   </span>
                 </div>
+
+                {onGoToHistory && (
+                  <div className="bg-gradient-to-r from-emerald-950/40 via-teal-950/30 to-neutral-900 border border-emerald-800/50 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <History className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div>
+                        <p className="font-semibold text-emerald-200">New: Full Campaign History &amp; Chronological Dispatch</p>
+                        <p className="text-[11px] text-emerald-300/80">
+                          Want to poll <strong>all past donations &amp; auctions from day 1</strong> and dispatch them to Discord in natural stream timeline order?
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onGoToHistory}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 shadow-sm flex items-center gap-1.5"
+                    >
+                      <span>Open History &amp; Catch-Up ➔</span>
+                    </button>
+                  </div>
+                )}
 
                 <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3 space-y-3 text-xs">
                   {/* Toggle: Include Auction Totals in Overall Campaign Progress */}

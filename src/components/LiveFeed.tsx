@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { DonationRecord } from '../types';
-import { CheckCircle2, AlertCircle, Clock, RefreshCw, Send, Trash2, Code2, HeartHandshake, Filter, Gavel, Mail, MapPin } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Clock, RefreshCw, Send, Trash2, Code2, HeartHandshake, Filter, Gavel, Mail, MapPin, History } from 'lucide-react';
 
 interface LiveFeedProps {
   donations: DonationRecord[];
   onResend: (id: string) => Promise<{ success: boolean; error?: string }>;
   onClear: () => Promise<void>;
   isLoading: boolean;
+  onGoToHistory?: () => void;
 }
 
 export const LiveFeed: React.FC<LiveFeedProps> = ({
@@ -14,6 +15,7 @@ export const LiveFeed: React.FC<LiveFeedProps> = ({
   onResend,
   onClear,
   isLoading,
+  onGoToHistory,
 }) => {
   const [filter, setFilter] = useState<'all' | 'sent' | 'failed' | 'test' | 'auctions'>('all');
   const [activePayload, setActivePayload] = useState<Record<string, any> | null>(null);
@@ -129,6 +131,24 @@ export const LiveFeed: React.FC<LiveFeedProps> = ({
           </button>
         )}
       </div>
+
+      {/* Campaign History & Backfill Quick Banner */}
+      {onGoToHistory && (
+        <div className="bg-emerald-950/20 border border-emerald-800/40 rounded-2xl p-3 px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <History className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-emerald-200">
+              Need to poll <strong>all past donations &amp; auctions from day 1</strong> or send them to Discord in natural chronological order?
+            </span>
+          </div>
+          <button
+            onClick={onGoToHistory}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3 py-1.5 rounded-xl transition-colors shrink-0 text-xs shadow-sm"
+          >
+            <span>Open Campaign History &amp; Catch-Up ➔</span>
+          </button>
+        </div>
+      )}
 
       {/* Donation & Auction List */}
       {filteredDonations.length === 0 ? (
