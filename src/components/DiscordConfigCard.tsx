@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { DiscordConfig } from '../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { DiscordConfig, DonationRecord } from '../types';
 import { DiscordMessagePreview } from './DiscordMessagePreview';
 import {
   Send,
@@ -25,15 +25,62 @@ import {
   Link2,
   Users,
   Lock,
+  Gavel,
+  Plus,
 } from 'lucide-react';
 
 interface DiscordConfigCardProps {
   config: DiscordConfig;
   campaignName?: string;
+  donations?: DonationRecord[];
   onSave: (updated: Partial<DiscordConfig>, newCampaignName?: string) => Promise<void>;
   onTest: (overrideCampaignName?: string) => Promise<{ success: boolean; error?: string }>;
   onCampaignNameChange?: (name: string) => void;
   onOpenRenderSimplifier?: () => void;
+}
+
+const DEFAULT_TEAM_PALETTE = [
+  { name: 'Blue', hex: '#3B82F6' },
+  { name: 'Pink', hex: '#EC4899' },
+  { name: 'Emerald', hex: '#10B981' },
+  { name: 'Purple', hex: '#8B5CF6' },
+  { name: 'Orange', hex: '#F97316' },
+  { name: 'Cyan', hex: '#06B6D4' },
+  { name: 'Yellow', hex: '#EAB308' },
+  { name: 'Violet', hex: '#A855F7' },
+  { name: 'Teal', hex: '#14B8A6' },
+  { name: 'Rose', hex: '#F43F5E' },
+  { name: 'Indigo', hex: '#6366F1' },
+  { name: 'Lime', hex: '#84CC16' },
+];
+
+function normalizeMemberKey(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getMemberColorFallback(name: string, customMap?: Record<string, string>): string {
+  if (!name) return '#3B82F6';
+  const clean = name.trim();
+  if (customMap && customMap[clean]) return customMap[clean];
+  if (customMap) {
+    const lower = clean.toLowerCase();
+    for (const [k, v] of Object.entries(customMap)) {
+      if (k.toLowerCase() === lower && v) return v;
+    }
+    const norm = normalizeMemberKey(clean);
+    if (norm) {
+      for (const [k, v] of Object.entries(customMap)) {
+        if (normalizeMemberKey(k) === norm && v) return v;
+      }
+    }
+  }
+  const hashKey = normalizeMemberKey(clean) || clean.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < hashKey.length; i++) {
+    hash = (hash << 5) - hash + hashKey.charCodeAt(i);
+    hash |= 0;
+  }
+  return DEFAULT_TEAM_PALETTE[Math.abs(hash) % DEFAULT_TEAM_PALETTE.length].hex;
 }
 
 const COLOR_PRESETS = [
@@ -129,6 +176,7 @@ const THEME_PRESETS: ThemePreset[] = [
 export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   config,
   campaignName,
+  donations,
   onSave,
   onTest,
   onCampaignNameChange,
@@ -146,6 +194,60 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [formTab, setFormTab] = useState<'appearance' | 'connection' | 'auctions'>('appearance');
+
+  // Team Member Color Coding State
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberColor, setNewMemberColor] = useState('#EC4899');
+
+  const detectedTeamMembers = useMemo(() => {
+    const set = new Set<string>();
+    if (donations && Array.isArray(donations)) {
+      for (const d of donations) {
+        if (d.teamMemberName && d.teamMemberName.trim()) {
+          set.add(d.teamMemberName.trim());
+        }
+      }
+    }
+    if (localConfig.teamMemberColors && typeof localConfig.teamMemberColors === 'object') {
+      for (const k of Object.keys(localConfig.teamMemberColors)) {
+        if (k.trim()) set.add(k.trim());
+      }
+    }
+    if (set.size === 0) {
+      set.add('Sarah_Gamer');
+      set.add('Captain Spark');
+    }
+    return Array.from(set);
+  }, [donations, localConfig.teamMemberColors]);
+
+  const handleUpdateTeamMemberColor = (name: string, hexColor: string) => {
+    setIsDirty(true);
+    setLocalConfig((prev) => ({
+      ...prev,
+      teamMemberColors: {
+        ...(prev.teamMemberColors || {}),
+        [name]: hexColor,
+      },
+    }));
+  };
+
+  const handleRemoveTeamMemberColor = (name: string) => {
+    setIsDirty(true);
+    setLocalConfig((prev) => {
+      const copy = { ...(prev.teamMemberColors || {}) };
+      delete copy[name];
+      return {
+        ...prev,
+        teamMemberColors: copy,
+      };
+    });
+  };
+
+  const handleAddCustomTeamMember = () => {
+    if (!newMemberName.trim()) return;
+    handleUpdateTeamMemberColor(newMemberName.trim(), newMemberColor);
+    setNewMemberName('');
+  };
 
   // Avatar Management State
   const [avatarMode, setAvatarMode] = useState<'upload' | 'url'>('upload');
@@ -906,6 +1008,186 @@ export const DiscordConfigCard: React.FC<DiscordConfigCardProps> = ({
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* 3.1 Auction Donation Color Matching */}
+                <div className="pt-2 border-t border-neutral-800/80 bg-neutral-950/40 p-3.5 rounded-xl border border-amber-900/30 space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-400 mt-0.5">
+                        <Gavel className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-neutral-200">Match Auction Donation Color</span>
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-medium">
+                            Fulfillment &amp; Bids
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-neutral-400 mt-0.5 leading-snug">
+                          When a winning bid or auction fulfillment is logged as a donation, match its embed color to your auction theme (<span className="text-amber-400 font-mono font-medium">{localConfig.auctionEmbedColor || '#F59E0B'}</span>) so it stands out from regular stream donations in both Discord and the live feed.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={localConfig.matchAuctionDonationColor !== false}
+                        onChange={(e) => handleInputChange('matchAuctionDonationColor', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
+                  </div>
+                  {localConfig.matchAuctionDonationColor !== false && (
+                    <div className="flex items-center gap-2 pt-1 pl-10 text-[11px] text-amber-300/80">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: localConfig.auctionEmbedColor || '#F59E0B' }} />
+                      <span>Active: Auction winning donations will use <strong className="font-mono text-amber-300">{localConfig.auctionEmbedColor || '#F59E0B'}</strong> instead of the standard donation color.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3.2 Team Campaign Member Color Coding */}
+                <div className="pt-2 border-t border-neutral-800/80 bg-neutral-950/40 p-3.5 rounded-xl border border-indigo-900/30 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center shrink-0 text-indigo-400 mt-0.5">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-neutral-200">Team Member Color Coding</span>
+                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded font-medium">
+                            Team Campaigns
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-neutral-400 mt-0.5 leading-snug">
+                          Color-code donations by the team member they support. Each team member gets a distinct embed accent color and feed badge so your community can see exactly where donations are coming from.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={localConfig.enableTeamMemberColors !== false}
+                        onChange={(e) => handleInputChange('enableTeamMemberColors', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+
+                  {localConfig.enableTeamMemberColors !== false && (
+                    <div className="space-y-3 pt-1">
+                      <div className="text-[11px] font-semibold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
+                        <span>Configured Team Members ({detectedTeamMembers.length})</span>
+                        <span className="text-[10px] text-neutral-500 font-normal">Auto-assigned accessible palette if not customized</span>
+                      </div>
+
+                      {/* Team Member Cards / Pickers */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {detectedTeamMembers.map((member) => {
+                          const currentColor = getMemberColorFallback(member, localConfig.teamMemberColors);
+                          const isCustomized = Boolean(localConfig.teamMemberColors && localConfig.teamMemberColors[member]);
+
+                          return (
+                            <div
+                              key={member}
+                              className="bg-neutral-900 border border-neutral-800 rounded-xl p-2.5 flex items-center justify-between gap-2.5 hover:border-neutral-700 transition-all"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                                  style={{ backgroundColor: currentColor }}
+                                />
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-xs text-white truncate">{member}</div>
+                                  <div className="text-[10px] text-neutral-400 font-mono">
+                                    {currentColor.toUpperCase()} {isCustomized ? '• Custom' : '• Auto'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <input
+                                  type="color"
+                                  value={currentColor}
+                                  onChange={(e) => handleUpdateTeamMemberColor(member, e.target.value)}
+                                  className="w-7 h-7 rounded bg-neutral-950 border border-neutral-700 cursor-pointer p-0.5"
+                                  title={`Change color for ${member}`}
+                                />
+                                {isCustomized && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveTeamMemberColor(member)}
+                                    className="text-[10px] text-neutral-500 hover:text-rose-400 p-1 rounded"
+                                    title="Reset to default auto-assigned color"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Add Custom Team Member */}
+                      <div className="p-2.5 bg-neutral-950/70 border border-neutral-800 rounded-xl space-y-2">
+                        <div className="text-[11px] text-neutral-300 font-medium flex items-center gap-1">
+                          <Plus className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Add Team Member Color</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={newMemberName}
+                            onChange={(e) => setNewMemberName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCustomTeamMember();
+                              }
+                            }}
+                            placeholder="Enter Member Name, Username, or Slug (e.g. Sarah_Gamer or sarah-gamer)"
+                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                          <input
+                            type="color"
+                            value={newMemberColor}
+                            onChange={(e) => setNewMemberColor(e.target.value)}
+                            className="w-7 h-7 rounded bg-neutral-900 border border-neutral-700 cursor-pointer p-0.5 shrink-0"
+                            title="Pick color"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddCustomTeamMember}
+                            disabled={!newMemberName.trim()}
+                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors shrink-0"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        {/* Quick Palette Swatches */}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                          <span className="text-[10px] text-neutral-500">Quick Palette:</span>
+                          {DEFAULT_TEAM_PALETTE.map((pal) => (
+                            <button
+                              key={pal.hex}
+                              type="button"
+                              onClick={() => setNewMemberColor(pal.hex)}
+                              className="w-4 h-4 rounded-full border border-neutral-700 hover:scale-110 transition-transform"
+                              style={{ backgroundColor: pal.hex }}
+                              title={pal.name}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-neutral-400 pt-1 leading-normal">
+                          💡 <strong>Automatic in API:</strong> When donations come into the team campaign total, Tiltify automatically attaches the teammate&apos;s supporting campaign details. You don&apos;t need to manually configure slugs — Donify auto-assigns colors and automatically matches names, usernames, or slugs.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 4. Campaign Display Name (Direct Live Override) */}

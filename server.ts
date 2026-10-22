@@ -87,6 +87,9 @@ const state: {
     dualPostAuctions: process.env.DISCORD_DUAL_POST_AUCTIONS === "true",
     auctionMentionType: (process.env.DISCORD_AUCTION_MENTION_TYPE as any) || "none",
     auctionMentionRoleId: (process.env.DISCORD_AUCTION_MENTION_ROLE_ID || "").trim(),
+    matchAuctionDonationColor: process.env.DISCORD_MATCH_AUCTION_DONATION_COLOR !== "false",
+    enableTeamMemberColors: process.env.DISCORD_ENABLE_TEAM_MEMBER_COLORS !== "false",
+    teamMemberColors: {},
   },
   tiltify: {
     clientId: (process.env.TILTIFY_CLIENT_ID || "").trim(),
@@ -452,6 +455,17 @@ function applyConfigObject(parsed: any, sourceName: string) {
   if (parsed.DISCORD_AUCTION_MENTION_ROLE_ID && String(parsed.DISCORD_AUCTION_MENTION_ROLE_ID).trim()) {
     state.discord.auctionMentionRoleId = String(parsed.DISCORD_AUCTION_MENTION_ROLE_ID).trim();
   }
+  if (parsed.DISCORD_MATCH_AUCTION_DONATION_COLOR !== undefined) {
+    state.discord.matchAuctionDonationColor = parsed.DISCORD_MATCH_AUCTION_DONATION_COLOR === true || parsed.DISCORD_MATCH_AUCTION_DONATION_COLOR === "true";
+  }
+  if (parsed.DISCORD_ENABLE_TEAM_MEMBER_COLORS !== undefined) {
+    state.discord.enableTeamMemberColors = parsed.DISCORD_ENABLE_TEAM_MEMBER_COLORS === true || parsed.DISCORD_ENABLE_TEAM_MEMBER_COLORS === "true";
+  }
+  if (parsed.DISCORD_TEAM_MEMBER_COLORS) {
+    try {
+      state.discord.teamMemberColors = typeof parsed.DISCORD_TEAM_MEMBER_COLORS === "string" ? JSON.parse(parsed.DISCORD_TEAM_MEMBER_COLORS) : parsed.DISCORD_TEAM_MEMBER_COLORS;
+    } catch {}
+  }
   if (parsed.DISCORD_FOOTER_TEXT && String(parsed.DISCORD_FOOTER_TEXT).trim()) state.discord.footerText = String(parsed.DISCORD_FOOTER_TEXT).trim();
   if (parsed.TILTIFY_CAMPAIGN_ID && String(parsed.TILTIFY_CAMPAIGN_ID).trim()) state.tiltify.campaignId = String(parsed.TILTIFY_CAMPAIGN_ID).trim();
   if (parsed.TILTIFY_CAMPAIGN_NAME && String(parsed.TILTIFY_CAMPAIGN_NAME).trim()) state.tiltify.campaignName = String(parsed.TILTIFY_CAMPAIGN_NAME).trim();
@@ -732,16 +746,56 @@ const seedAuctionDonation: DonationRecord = {
   },
 };
 
+const seedAuctionDonationFulfillment: DonationRecord = {
+  id: "demo-don-auc-002",
+  donorName: "Victoria Sterling",
+  donorEmail: "v.sterling@collectors.org",
+  amount: 450.0,
+  currency: "USD",
+  comment: "Winning bid donation for Signed Framed Streamer Jersey! 🔨",
+  campaignName: "Community Charity Drive 2026",
+  campaignId: state.tiltify.campaignId || "camp-101",
+  causeName: "Global Relief Initiative",
+  targetGoal: 5000,
+  totalRaised: 2750,
+  receivedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+  source: "simulator",
+  discordStatus: "pending",
+  isAuctionDonation: true,
+};
+
+const seedTeamDonation: DonationRecord = {
+  id: "demo-don-team-003",
+  donorName: "PixelFanatic",
+  donorEmail: "fan@example.com",
+  amount: 100.0,
+  currency: "USD",
+  comment: "Supporting Sarah during the 12-hour marathon! Let's crush this goal! 🎮✨",
+  campaignName: "Community Charity Drive 2026",
+  campaignId: state.tiltify.campaignId || "camp-101",
+  causeName: "Global Relief Initiative",
+  teamMemberName: "Sarah_Gamer",
+  targetGoal: 5000,
+  totalRaised: 2850,
+  receivedAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+  source: "simulator",
+  discordStatus: "pending",
+};
+
 const restored = loadDonationsFromDisk();
 // Only load mock seed donations if there is no real campaign configured and no saved records on disk
 if (!restored && !state.tiltify.campaignId) {
-  state.donations.push(seedDonation);
+  state.donations.push(seedTeamDonation);
+  state.donations.push(seedAuctionDonationFulfillment);
   state.donations.push(seedAuctionDonation);
+  state.donations.push(seedDonation);
   state.seenDonationIds.add(seedDonation.id);
+  state.seenDonationIds.add(seedAuctionDonationFulfillment.id);
+  state.seenDonationIds.add(seedTeamDonation.id);
   state.seenAuctionIds.add(seedAuctionDonation.id);
-  state.botStatus.totalDonationsProcessed = 2;
+  state.botStatus.totalDonationsProcessed = 4;
   state.botStatus.totalAuctionsProcessed = 1;
-  state.botStatus.totalAmountProcessed = 525.0;
+  state.botStatus.totalAmountProcessed = 1075.0;
 } else if (state.tiltify.campaignId) {
   // Purge any legacy mock seed items or invalid 0-dollar items from real campaign history
   state.donations = state.donations.filter(
@@ -821,6 +875,142 @@ function isFillerInstructions(text?: string): boolean {
     lower === "signature upon delivery requested." ||
     lower === "include thank-you stream card."
   );
+}
+
+// Deterministic accessible 12-color palette for team members
+const DEFAULT_TEAM_PALETTE = [
+  "#3B82F6", // Blue
+  "#EC4899", // Pink
+  "#10B981", // Emerald
+  "#8B5CF6", // Purple
+  "#F97316", // Orange
+  "#06B6D4", // Cyan
+  "#EAB308", // Yellow / Gold
+  "#A855F7", // Violet
+  "#14B8A6", // Teal
+  "#F43F5E", // Rose
+  "#6366F1", // Indigo
+  "#84CC16", // Lime
+];
+
+function normalizeMemberKey(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getTeamMemberColor(name?: string, customMap?: Record<string, string>): string {
+  if (!name || typeof name !== "string") return "#3B82F6";
+  const clean = name.trim();
+  if (!clean) return "#3B82F6";
+  if (customMap && typeof customMap === "object") {
+    if (customMap[clean]) return customMap[clean];
+    const lower = clean.toLowerCase();
+    for (const [k, v] of Object.entries(customMap)) {
+      if (k.toLowerCase() === lower && v) return v;
+    }
+    // Match normalized slugs (e.g. "sarah-gamer" matches "Sarah Gamer" or "sarah_gamer")
+    const norm = normalizeMemberKey(clean);
+    if (norm) {
+      for (const [k, v] of Object.entries(customMap)) {
+        if (normalizeMemberKey(k) === norm && v) return v;
+      }
+    }
+  }
+  // Consistent hashing by normalized key so slug vs display name hash to the exact same color!
+  const hashKey = normalizeMemberKey(clean) || clean.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < hashKey.length; i++) {
+    hash = (hash << 5) - hash + hashKey.charCodeAt(i);
+    hash |= 0;
+  }
+  const idx = Math.abs(hash) % DEFAULT_TEAM_PALETTE.length;
+  return DEFAULT_TEAM_PALETTE[idx];
+}
+
+// Comprehensive team member extractor for Tiltify v5 API & Webhook payloads
+function extractTeamMemberName(raw: any, payload?: any, effectiveCampaignName?: string): string | undefined {
+  if (!raw && !payload) return undefined;
+
+  const campLower = effectiveCampaignName ? effectiveCampaignName.trim().toLowerCase() : "";
+
+  // 1. Supporting campaign object (Tiltify v5 Team Campaign child)
+  const sc = raw?.supporting_campaign || payload?.supporting_campaign;
+  if (sc && typeof sc === "object") {
+    if (sc.user && typeof sc.user === "object") {
+      const uName = sc.user.name || sc.user.public_name || sc.user.username || sc.user.slug;
+      if (uName && (!campLower || uName.trim().toLowerCase() !== campLower)) {
+        return uName.trim();
+      }
+    }
+    if (sc.name || sc.title) {
+      const cName = String(sc.name || sc.title).trim();
+      if (cName && (!campLower || cName.toLowerCase() !== campLower)) {
+        return cName;
+      }
+    }
+  }
+
+  // 2. Team member / member objects
+  const tm = raw?.team_member || raw?.member || payload?.team_member || payload?.member;
+  if (tm && typeof tm === "object") {
+    const tmName = tm.name || tm.public_name || tm.username || tm.user?.name || tm.user?.username || tm.user?.slug || tm.title;
+    if (tmName) return String(tmName).trim();
+  }
+
+  // 3. Explicit string attributes
+  const explicit = raw?.team_member_name || raw?.member_name || raw?.team_member_slug || payload?.team_member_name;
+  if (explicit && typeof explicit === "string" && explicit.trim()) {
+    return explicit.trim();
+  }
+
+  // 4. Tiltify v5 Webhook "facts" array (indirect locality on team campaigns)
+  const facts = raw?.facts || payload?.facts || payload?.meta?.facts;
+  if (Array.isArray(facts)) {
+    const memberFact = facts.find((f: any) =>
+      (f.usage_type === "campaign" || f.usage_type === "supporting_campaign" || f.type === "campaign") &&
+      f.name && (!campLower || f.name.trim().toLowerCase() !== campLower)
+    );
+    if (memberFact) {
+      return String(memberFact.name || memberFact.slug || memberFact.username).trim();
+    }
+  }
+
+  // 5. Fallback: check raw.campaign.user.name if distinct from parent campaign
+  if (raw?.campaign?.user?.name) {
+    const uName = String(raw.campaign.user.name).trim();
+    if (uName && (!campLower || uName.toLowerCase() !== campLower)) {
+      return uName;
+    }
+  }
+
+  return undefined;
+}
+
+function isAuctionRelated(donation: DonationRecord): boolean {
+  if (donation.isAuctionDonation === true) return true;
+  if (donation.eventType === "auction_ended" || Boolean(donation.auction)) return true;
+  const raw = donation.rawPayload || {};
+  if (raw.is_auction || raw.auction || raw.auction_id || raw.type === "auction" || raw.source === "auction") return true;
+  const comment = (donation.comment || "").toLowerCase();
+  if (
+    comment.includes("auction") ||
+    comment.includes("winning bid") ||
+    comment.includes("auction item") ||
+    comment.includes("won auction") ||
+    comment.includes("auction winner")
+  ) {
+    return true;
+  }
+  const dName = (donation.donorName || "").trim().toLowerCase();
+  if (dName && dName !== "anonymous" && dName !== "anonymous supporter") {
+    const hasMatchingAuction = state.donations.some(
+      (d) =>
+        (d.eventType === "auction_ended" || d.auction) &&
+        (d.auction?.winnerName || "").trim().toLowerCase() === dName &&
+        Math.abs((d.amount || d.auction?.winningBid || 0) - donation.amount) < 0.05
+    );
+    if (hasMatchingAuction) return true;
+  }
+  return false;
 }
 
 // Helper: Construct Rich Discord Embed and Content Payload for a Donation or Auction Winner
@@ -1120,10 +1310,35 @@ function buildDiscordEmbed(
       embedDescription = `**${donation.donorName || "An anonymous donor"}** contributed to the campaign!`;
     }
 
-    embedColor = hexToDiscordColor(config.embedColor);
-    embedFooterText = config.footerText?.trim() || "Tiltify Donation Alerts";
+    const isAuctionDonation = !isAuction && isAuctionRelated(donation);
+    const shouldMatchAuctionColor = isAuctionDonation && config.matchAuctionDonationColor !== false;
+    const shouldColorTeamMember = !isAuction && !shouldMatchAuctionColor && config.enableTeamMemberColors !== false && Boolean(donation.teamMemberName);
+
+    if (shouldMatchAuctionColor) {
+      if (!config.embedTitleTemplate?.trim()) {
+        embedTitle = `🔨 Auction Win Donation: ${formattedAmount}!`;
+      }
+      embedColor = hexToDiscordColor(config.auctionEmbedColor || "#F59E0B");
+      embedFooterText = config.auctionFooterText?.trim() || "Tiltify Auction House • Winner Fulfillment";
+    } else if (shouldColorTeamMember && donation.teamMemberName) {
+      const tmColor = getTeamMemberColor(donation.teamMemberName, config.teamMemberColors);
+      embedColor = hexToDiscordColor(tmColor);
+      embedFooterText = config.footerText?.trim() || "Tiltify Donation Alerts";
+    } else {
+      embedColor = hexToDiscordColor(config.embedColor);
+      embedFooterText = config.footerText?.trim() || "Tiltify Donation Alerts";
+    }
 
     const layout = config.embedLayout || "modern";
+
+    // 🔨 Auction Donation Badge Field
+    if (shouldMatchAuctionColor) {
+      embedFields.push({
+        name: "🔨 Auction Winning Donation",
+        value: `This donation is linked to an auction winning bid on **${donation.campaignName || "the campaign"}**!`,
+        inline: false,
+      });
+    }
 
     if (layout === "compact") {
       // COMPACT LAYOUT: Streamlined, high-density presentation for active streams
@@ -1132,7 +1347,7 @@ function buildDiscordEmbed(
         `**Donor:** ${donation.donorName || "Anonymous"}`,
         `**Amount:** ${formattedAmount}`,
         ...(config.includeCampaignDetails && donation.campaignName ? [`**Campaign:** ${donation.campaignName}`] : []),
-        ...(donation.teamMemberName ? [`**Member:** ${donation.teamMemberName}`] : []),
+        ...(donation.teamMemberName ? [`**Team Member:** ${donation.teamMemberName}`] : []),
       ].join("  •  ");
 
       embedFields.push({
@@ -1178,11 +1393,18 @@ function buildDiscordEmbed(
         }
       );
 
+      if (donation.teamMemberName) {
+        embedFields.push({
+          name: "👤 Supporting Team Member",
+          value: `**${donation.teamMemberName}**`,
+          inline: true,
+        });
+      }
+
       if (config.includeCampaignDetails && (donation.campaignName || donation.causeName)) {
         const details: string[] = [];
         if (donation.campaignName) details.push(`**${donation.campaignName}**`);
         if (donation.causeName) details.push(`*${donation.causeName}*`);
-        if (donation.teamMemberName) details.push(`👤 Team Member: **${donation.teamMemberName}**`);
         embedFields.push({
           name: "🎯 Campaign",
           value: details.join(" • "),
@@ -3071,12 +3293,7 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
           extractedDonor = "Anonymous Supporter";
         }
 
-        const rawSupporting = raw.supporting_campaign || raw.team_member || raw.member;
-        const teamMemberName =
-          (typeof rawSupporting === "object" ? (rawSupporting.user?.name || rawSupporting.name || rawSupporting.title) : undefined) ||
-          raw.team_member_name ||
-          (raw.campaign?.user?.name && raw.campaign?.user?.name !== effectiveCampaignName ? raw.campaign.user.name : undefined) ||
-          undefined;
+        const teamMemberName = extractTeamMemberName(raw, undefined, effectiveCampaignName);
 
         const newDonation: DonationRecord = {
           id: donationId,
@@ -3097,6 +3314,7 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
           discordStatus: isInitialHistorySync ? "sent" : "pending",
           rawPayload: raw,
         };
+        newDonation.isAuctionDonation = isAuctionRelated(newDonation) || undefined;
 
         // Only dispatch Discord alert if this is NOT an initial backfill of historical donations
         if (!isInitialHistorySync) {
@@ -4014,6 +4232,8 @@ app.post("/api/discord/test", requireAuth, async (req: Request, res: Response) =
       currency: req.body.currency || "USD",
       comment: req.body.comment || "This is a test notification from the Tiltify Discord Bot! Everything is configured properly. 🚀",
       campaignName: req.body.campaignName || state.tiltify.campaignName?.trim() || (state.tiltify.campaignId ? `Campaign #${state.tiltify.campaignId}` : "Charity Stream 2026"),
+      teamMemberName: req.body.teamMemberName ? String(req.body.teamMemberName).trim() : undefined,
+      isAuctionDonation: Boolean(req.body.isAuctionDonation),
       reward: req.body.reward || undefined,
       totalRaised: typeof req.body.totalRaised === "number" ? req.body.totalRaised : 3625.0,
       targetGoal: typeof req.body.targetGoal === "number" ? req.body.targetGoal : 5000.0,
@@ -4480,11 +4700,7 @@ async function fetchAllCampaignHistory(campaignId: string) {
     if (!extractedDonor && raw.name) extractedDonor = String(raw.name).trim();
     if (!extractedDonor) extractedDonor = "Anonymous Supporter";
 
-    const rawSupporting = raw.supporting_campaign || raw.team_member || raw.member;
-    const teamMemberName =
-      (typeof rawSupporting === "object" ? (rawSupporting.user?.name || rawSupporting.name || rawSupporting.title) : undefined) ||
-      raw.team_member_name ||
-      undefined;
+    const teamMemberName = extractTeamMemberName(raw, undefined, effectiveCampaignName);
 
     if (existingIndex === -1) {
       const newDonation: DonationRecord = {
@@ -4507,6 +4723,7 @@ async function fetchAllCampaignHistory(campaignId: string) {
         discordStatus: "pending", // Mark as pending so user can choose to backfill to Discord
         rawPayload: raw,
       };
+      newDonation.isAuctionDonation = isAuctionRelated(newDonation) || undefined;
       state.donations.push(newDonation);
       state.seenDonationIds.add(donationId);
       newDonationsImported++;
@@ -5332,12 +5549,7 @@ app.post("/api/tiltify/webhook", async (req: Request, res: Response) => {
     } else {
       const { donorEmail, reward } = extractRewardAndDelivery(raw, state.campaignRewardsCache);
 
-      const rawSupporting = raw.supporting_campaign || raw.team_member || raw.member;
-      const teamMemberName =
-        (typeof rawSupporting === "object" ? (rawSupporting.user?.name || rawSupporting.name || rawSupporting.title) : undefined) ||
-        raw.team_member_name ||
-        (raw.campaign?.user?.name && raw.campaign?.user?.name !== (state.tiltify.campaignName?.trim() || raw?.campaign?.name) ? raw.campaign.user.name : undefined) ||
-        undefined;
+      const teamMemberName = extractTeamMemberName(raw, payload, state.tiltify.campaignName?.trim() || raw?.campaign?.name);
 
       donation = {
         id: donationId,

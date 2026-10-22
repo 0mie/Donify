@@ -21,7 +21,42 @@ import {
   Check,
   ChevronDown,
   Info,
+  Users,
 } from 'lucide-react';
+
+const DEFAULT_TEAM_PALETTE = [
+  '#3B82F6', '#EC4899', '#10B981', '#8B5CF6', '#F97316', '#06B6D4',
+  '#EAB308', '#A855F7', '#14B8A6', '#F43F5E', '#6366F1', '#84CC16',
+];
+
+function normalizeMemberKey(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getTeamMemberColor(name: string, customMap?: Record<string, string>): string {
+  if (!name) return '#3B82F6';
+  const clean = name.trim();
+  if (customMap && customMap[clean]) return customMap[clean];
+  if (customMap) {
+    const lower = clean.toLowerCase();
+    for (const [k, v] of Object.entries(customMap)) {
+      if (k.toLowerCase() === lower && v) return v;
+    }
+    const norm = normalizeMemberKey(clean);
+    if (norm) {
+      for (const [k, v] of Object.entries(customMap)) {
+        if (normalizeMemberKey(k) === norm && v) return v;
+      }
+    }
+  }
+  const hashKey = normalizeMemberKey(clean) || clean.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < hashKey.length; i++) {
+    hash = (hash << 5) - hash + hashKey.charCodeAt(i);
+    hash |= 0;
+  }
+  return DEFAULT_TEAM_PALETTE[Math.abs(hash) % DEFAULT_TEAM_PALETTE.length];
+}
 
 interface CampaignHistoryBackfillProps {
   tiltifyConfig: TiltifyConfig;
@@ -711,13 +746,22 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
           <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
             {sortedDisplayList.map((item, index) => {
               const isAuction = Boolean(item.auction) || item.eventType === 'auction_ended';
+              const isAuctionDonation = Boolean(item.isAuctionDonation) || (!isAuction && /auction/i.test(`${item.comment || ''} ${item.donorName || ''}`));
               const isDelivered = item.discordStatus === 'sent';
               const isFailed = item.discordStatus === 'failed';
               const isPending = !isDelivered && !isFailed;
+              const memberColor = item.teamMemberName ? getTeamMemberColor(item.teamMemberName, discordConfig?.teamMemberColors) : null;
+
+              const borderStyle: React.CSSProperties = (isAuction || isAuctionDonation)
+                ? { borderLeftWidth: '4px', borderLeftColor: discordConfig?.auctionEmbedColor || '#F59E0B' }
+                : memberColor
+                ? { borderLeftWidth: '4px', borderLeftColor: memberColor }
+                : {};
 
               return (
                 <div
                   key={item.id}
+                  style={borderStyle}
                   className="bg-neutral-950/80 border border-neutral-800/80 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-neutral-700 transition-all text-xs"
                 >
                   {/* Left: Sequence index, icon, donor name, comment */}
@@ -737,10 +781,29 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
                             <Gavel className="w-2.5 h-2.5" />
                             <span>Auction Win</span>
                           </span>
+                        ) : isAuctionDonation ? (
+                          <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded font-medium flex items-center gap-1">
+                            <Gavel className="w-2.5 h-2.5" />
+                            <span>Auction Donation</span>
+                          </span>
                         ) : (
                           <span className="text-[10px] bg-teal-500/10 text-teal-300 border border-teal-500/30 px-1.5 py-0.2 rounded font-medium flex items-center gap-1">
                             <HeartHandshake className="w-2.5 h-2.5" />
                             <span>Donation</span>
+                          </span>
+                        )}
+
+                        {item.teamMemberName && (
+                          <span
+                            className="text-[10px] px-1.5 py-0.2 rounded font-medium flex items-center gap-1 border"
+                            style={{
+                              backgroundColor: `${memberColor}20`,
+                              borderColor: `${memberColor}50`,
+                              color: memberColor || '#60A5FA',
+                            }}
+                          >
+                            <Users className="w-2.5 h-2.5" />
+                            <span className="truncate max-w-[120px]">{item.teamMemberName}</span>
                           </span>
                         )}
 

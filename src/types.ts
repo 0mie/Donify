@@ -91,6 +91,9 @@ export interface DiscordConfig {
   dualPostAuctions?: boolean;
   auctionMentionType?: 'none' | 'here' | 'everyone' | 'role';
   auctionMentionRoleId?: string;
+  matchAuctionDonationColor?: boolean;
+  enableTeamMemberColors?: boolean;
+  teamMemberColors?: Record<string, string>;
 }
 
 export interface SavedCampaignProfile {
@@ -150,6 +153,7 @@ export interface DonationRecord {
   source: 'webhook' | 'poll' | 'simulator';
   discordStatus: 'sent' | 'failed' | 'pending';
   discordError?: string;
+  isAuctionDonation?: boolean;
   rawPayload?: Record<string, any>;
 }
 

@@ -45,7 +45,7 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
     },
   },
 }) => {
-  const [previewMode, setPreviewMode] = useState<'donation' | 'auction'>('donation');
+  const [previewMode, setPreviewMode] = useState<'donation' | 'auction_donation' | 'team' | 'auction'>('donation');
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
 
   // Sample Auction data for previewing auction alerts
@@ -71,9 +71,14 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
     endedAt: new Date().toISOString(),
   };
 
-  let mentionText = "";
   const isAuction = previewMode === 'auction';
+  const isAuctionDonation = previewMode === 'auction_donation';
+  const isTeam = previewMode === 'team';
 
+  const sampleTeamMember = "Sarah_Gamer";
+  const sampleTeamColor = config.teamMemberColors?.[sampleTeamMember] || '#EC4899';
+
+  let mentionText = "";
   if (isAuction) {
     if (config.auctionMentionType === "role" && config.auctionMentionRoleId) {
       const clean = config.auctionMentionRoleId.replace(/[<@&>]/g, "").trim();
@@ -107,6 +112,10 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
   const reward = sampleDonation.reward;
   const embedColor = isAuction
     ? (config.auctionEmbedColor || "#F59E0B")
+    : (isAuctionDonation && config.matchAuctionDonationColor !== false)
+    ? (config.auctionEmbedColor || "#F59E0B")
+    : (isTeam && config.enableTeamMemberColors !== false)
+    ? sampleTeamColor
     : (config.embedColor || "#00d1b2");
 
   const messagePrefix = isAuction
@@ -119,15 +128,17 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
     return tpl.replace(/\{(\w+)\}/g, (_, key) => (vars[key] !== undefined ? vars[key] : `{${key}}`));
   };
 
-  const donationTitle = interpolate(
-    config.embedTitleTemplate,
-    `🎉 New Donation: ${formattedAmount}!`,
-    {
-      amount: formattedAmount,
-      donor: sampleDonation.donorName,
-      campaign: sampleDonation.campaignName,
-    }
-  );
+  const donationTitle = (isAuctionDonation && config.matchAuctionDonationColor !== false && !config.embedTitleTemplate?.trim())
+    ? `🔨 Auction Win Donation: ${formattedAmount}!`
+    : interpolate(
+        config.embedTitleTemplate,
+        `🎉 New Donation: ${formattedAmount}!`,
+        {
+          amount: formattedAmount,
+          donor: sampleDonation.donorName,
+          campaign: sampleDonation.campaignName,
+        }
+      );
 
   const donationDesc = interpolate(
     config.embedDescriptionTemplate,
@@ -165,29 +176,51 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
           <span className="bg-[#232428] text-[#b5bac1] px-2 py-0.5 rounded text-[10px]">#donations</span>
         </div>
 
-        {/* Preview Selector: Donation vs Auction */}
-        <div className="flex items-center bg-[#1e1f22] p-0.5 rounded-lg border border-[#2b2d31] text-[11px]">
+        {/* Preview Selector: Donation vs Auction vs Team */}
+        <div className="flex items-center bg-[#1e1f22] p-0.5 rounded-lg border border-[#2b2d31] text-[11px] overflow-x-auto">
           <button
             type="button"
             onClick={() => setPreviewMode('donation')}
-            className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+            className={`px-2.5 py-1 rounded-md font-medium transition-all shrink-0 ${
               previewMode === 'donation'
                 ? 'bg-[#35373c] text-white shadow-sm'
                 : 'text-[#949ba4] hover:text-[#dbdee1]'
             }`}
           >
-            Donation Alert
+            Donation
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewMode('auction_donation')}
+            className={`px-2.5 py-1 rounded-md font-medium transition-all shrink-0 ${
+              previewMode === 'auction_donation'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-[#949ba4] hover:text-[#dbdee1]'
+            }`}
+          >
+            🔨 Auction Win Donation
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewMode('team')}
+            className={`px-2.5 py-1 rounded-md font-medium transition-all shrink-0 ${
+              previewMode === 'team'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-[#949ba4] hover:text-[#dbdee1]'
+            }`}
+          >
+            👤 Team Donation
           </button>
           <button
             type="button"
             onClick={() => setPreviewMode('auction')}
-            className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+            className={`px-2.5 py-1 rounded-md font-medium transition-all shrink-0 ${
               previewMode === 'auction'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-[#949ba4] hover:text-[#dbdee1]'
             }`}
           >
-            🔨 Auction Ended Alert
+            🏆 Auction Ended
           </button>
         </div>
       </div>
@@ -460,6 +493,19 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                 </div>
 
                 {/* Embed Fields Grid / Summary based on layout */}
+                {/* 🔨 Auction Winning Donation Field Banner */}
+                {isAuctionDonation && config.matchAuctionDonationColor !== false && (
+                  <div className="mb-3 bg-[#232428]/90 border border-amber-500/40 p-2.5 rounded-lg text-[12px] flex items-start gap-2">
+                    <span className="text-amber-400 font-bold">🔨</span>
+                    <div>
+                      <div className="text-amber-300 font-semibold text-[11px] uppercase tracking-wider">Auction Winning Donation</div>
+                      <div className="text-[#dbdee1] text-xs">
+                        This donation is linked to an auction winning bid on <strong>{sampleDonation.campaignName}</strong>!
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {config.embedLayout === 'compact' ? (
                   /* ⚡ COMPACT LAYOUT: Streamlined horizontal stats bar for high volume streams */
                   <div className="space-y-2 mb-3">
@@ -472,6 +518,12 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                         <span className="text-[#949ba4]">Amount:</span>{' '}
                         <span className="text-[#23a55a] font-bold">{formattedAmount}</span>
                       </div>
+                      {isTeam && (
+                        <div>
+                          <span className="text-[#949ba4]">Member:</span>{' '}
+                          <strong style={{ color: sampleTeamColor }}>{sampleTeamMember}</strong>
+                        </div>
+                      )}
                       {config.includeCampaignDetails && sampleDonation.campaignName && (
                         <div className="text-[11px] text-[#b5bac1]">
                           <span className="text-[#949ba4]">Campaign:</span> {sampleDonation.campaignName}
@@ -502,6 +554,14 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                         <div className="text-[#23a55a] font-bold">{formattedAmount}</div>
                       </div>
                     </div>
+
+                    {/* Supporting Team Member Field */}
+                    {isTeam && config.enableTeamMemberColors !== false && (
+                      <div className="mb-3 bg-[#232428]/70 p-2 rounded text-[12px] border" style={{ borderColor: `${sampleTeamColor}60` }}>
+                        <span className="text-[#949ba4] font-semibold">👤 Supporting Team Member: </span>
+                        <strong className="font-semibold ml-1" style={{ color: sampleTeamColor }}>{sampleTeamMember}</strong>
+                      </div>
+                    )}
 
                     {/* Campaign Details */}
                     {config.includeCampaignDetails && sampleDonation.campaignName && (

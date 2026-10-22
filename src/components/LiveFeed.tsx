@@ -1,28 +1,90 @@
-import React, { useState } from 'react';
-import { DonationRecord } from '../types';
-import { CheckCircle2, AlertCircle, Clock, RefreshCw, Send, Trash2, Code2, HeartHandshake, Filter, Gavel, Mail, MapPin, History } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { DonationRecord, DiscordConfig } from '../types';
+import {
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  RefreshCw,
+  Send,
+  Trash2,
+  Code2,
+  HeartHandshake,
+  Filter,
+  Gavel,
+  Mail,
+  MapPin,
+  History,
+  Users,
+} from 'lucide-react';
 
 interface LiveFeedProps {
   donations: DonationRecord[];
+  discordConfig?: DiscordConfig;
   onResend: (id: string) => Promise<{ success: boolean; error?: string }>;
   onClear: () => Promise<void>;
   isLoading: boolean;
   onGoToHistory?: () => void;
 }
 
+const DEFAULT_TEAM_PALETTE = [
+  '#3B82F6', '#EC4899', '#10B981', '#8B5CF6', '#F97316', '#06B6D4',
+  '#EAB308', '#A855F7', '#14B8A6', '#F43F5E', '#6366F1', '#84CC16',
+];
+
 export const LiveFeed: React.FC<LiveFeedProps> = ({
   donations,
+  discordConfig,
   onResend,
   onClear,
   isLoading,
   onGoToHistory,
 }) => {
   const [filter, setFilter] = useState<'all' | 'sent' | 'failed' | 'test' | 'auctions'>('all');
+  const [selectedMember, setSelectedMember] = useState<string>('all');
   const [activePayload, setActivePayload] = useState<Record<string, any> | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ id: string; success: boolean; text: string } | null>(null);
 
+  const teamMembers = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of donations) {
+      if (d.teamMemberName && d.teamMemberName.trim()) {
+        set.add(d.teamMemberName.trim());
+      }
+    }
+    return Array.from(set);
+  }, [donations]);
+
+  const normalizeKey = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const getTeamColor = (name: string) => {
+    if (!name) return '#3B82F6';
+    const clean = name.trim();
+    const customMap = discordConfig?.teamMemberColors;
+    if (customMap && customMap[clean]) return customMap[clean];
+    if (customMap) {
+      const lower = clean.toLowerCase();
+      for (const [k, v] of Object.entries(customMap)) {
+        if (k.toLowerCase() === lower && v) return v;
+      }
+      const norm = normalizeKey(clean);
+      if (norm) {
+        for (const [k, v] of Object.entries(customMap)) {
+          if (normalizeKey(k) === norm && v) return v;
+        }
+      }
+    }
+    const hashKey = normalizeKey(clean) || clean.toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < hashKey.length; i++) {
+      hash = (hash << 5) - hash + hashKey.charCodeAt(i);
+      hash |= 0;
+    }
+    return DEFAULT_TEAM_PALETTE[Math.abs(hash) % DEFAULT_TEAM_PALETTE.length];
+  };
+
   const filteredDonations = donations.filter((d) => {
+    if (selectedMember !== 'all' && d.teamMemberName !== selectedMember) return false;
     if (filter === 'sent') return d.discordStatus === 'sent';
     if (filter === 'failed') return d.discordStatus === 'failed';
     if (filter === 'test') return d.source === 'simulator';
@@ -118,6 +180,31 @@ export const LiveFeed: React.FC<LiveFeedProps> = ({
           >
             Simulated ({donations.filter((d) => d.source === 'simulator').length})
           </button>
+
+          {/* Team Member Dropdown Filter */}
+          {teamMembers.length > 0 && (
+            <div className="flex items-center gap-1.5 pl-2 sm:border-l border-neutral-800 shrink-0">
+              <span className="text-neutral-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1 shrink-0">
+                <Users className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Member:</span>
+              </span>
+              <select
+                value={selectedMember}
+                onChange={(e) => setSelectedMember(e.target.value)}
+                className="bg-neutral-950 border border-neutral-800 text-neutral-200 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="all">All Members ({donations.length})</option>
+                {teamMembers.map((m) => {
+                  const count = donations.filter((d) => d.teamMemberName === m).length;
+                  return (
+                    <option key={m} value={m}>
+                      {m} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Clear History */}
@@ -154,33 +241,63 @@ export const LiveFeed: React.FC<LiveFeedProps> = ({
       {filteredDonations.length === 0 ? (
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-12 text-center">
           <HeartHandshake className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
-          <h4 className="text-base font-semibold text-neutral-200 mb-1">No events logged yet</h4>
+          <h4 className="text-base font-semibold text-neutral-200 mb-1">No events found</h4>
           <p className="text-xs text-neutral-400 max-w-md mx-auto mb-4">
-            Donations and auction ended events received via Tiltify Webhook, API Poller, or the Test Simulator will appear here along with Discord delivery status.
+            {selectedMember !== 'all'
+              ? `No donation events found for team member "${selectedMember}".`
+              : 'Donations and auction ended events received via Tiltify Webhook, API Poller, or the Test Simulator will appear here along with Discord delivery status.'}
           </p>
+          {selectedMember !== 'all' && (
+            <button
+              onClick={() => setSelectedMember('all')}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+            >
+              Reset Member Filter
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
           {filteredDonations.map((item) => {
             const isAuction = item.eventType === 'auction_ended' || !!item.auction;
             const auction = item.auction;
+            const isAuctionDonation = !isAuction && (
+              item.isAuctionDonation ||
+              (item.comment || '').toLowerCase().includes('auction') ||
+              item.rawPayload?.is_auction ||
+              item.rawPayload?.auction
+            );
+            const shouldMatchAuctionColor = isAuctionDonation && discordConfig?.matchAuctionDonationColor !== false;
+            const hasTeamMember = Boolean(item.teamMemberName && discordConfig?.enableTeamMemberColors !== false);
+            const memberColor = item.teamMemberName ? getTeamColor(item.teamMemberName) : undefined;
+            const cardAccentColor = isAuction || shouldMatchAuctionColor
+              ? (discordConfig?.auctionEmbedColor || '#F59E0B')
+              : (hasTeamMember && memberColor ? memberColor : undefined);
 
             return (
               <div
                 key={item.id}
-                className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 shadow-sm hover:border-neutral-700 transition-all"
+                className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 shadow-sm hover:border-neutral-700 transition-all relative overflow-hidden"
+                style={cardAccentColor ? { borderLeftWidth: '4px', borderLeftColor: cardAccentColor } : {}}
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     {/* Avatar Icon */}
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 border ${
-                        isAuction
+                        isAuction || shouldMatchAuctionColor
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                          : 'bg-teal-500/10 text-teal-400 border-teal-500/20'
+                          : (hasTeamMember && memberColor
+                            ? 'border'
+                            : 'bg-teal-500/10 text-teal-400 border-teal-500/20')
                       }`}
+                      style={!isAuction && !shouldMatchAuctionColor && hasTeamMember && memberColor ? {
+                        backgroundColor: `${memberColor}15`,
+                        color: memberColor,
+                        borderColor: `${memberColor}30`,
+                      } : {}}
                     >
-                      {isAuction ? (
+                      {isAuction || shouldMatchAuctionColor ? (
                         <Gavel className="w-5 h-5 text-amber-400" />
                       ) : (
                         item.donorName ? item.donorName[0].toUpperCase() : 'A'
@@ -202,6 +319,17 @@ export const LiveFeed: React.FC<LiveFeedProps> = ({
                               🔨 AUCTION
                             </span>
                           </>
+                        ) : shouldMatchAuctionColor ? (
+                          <>
+                            <span className="font-semibold text-white text-sm">{item.donorName || 'Anonymous'}</span>
+                            <span className="bg-amber-950/40 border border-amber-800/60 text-amber-400 font-bold px-2 py-0.5 rounded-lg text-xs font-mono">
+                              {formatCurrency(item.amount, item.currency)}
+                            </span>
+                            <span className="bg-amber-950/80 text-amber-300 border border-amber-800/60 text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider font-semibold flex items-center gap-1">
+                              <Gavel className="w-2.5 h-2.5" />
+                              <span>AUCTION DONATION</span>
+                            </span>
+                          </>
                         ) : (
                           <>
                             <span className="font-semibold text-white text-sm">{item.donorName || 'Anonymous'}</span>
@@ -209,6 +337,21 @@ export const LiveFeed: React.FC<LiveFeedProps> = ({
                               {formatCurrency(item.amount, item.currency)}
                             </span>
                           </>
+                        )}
+
+                        {/* Team Member Color Pill */}
+                        {item.teamMemberName && (
+                          <span
+                            className="text-[10px] px-2 py-0.5 rounded-md font-semibold border flex items-center gap-1 shadow-sm"
+                            style={{
+                              backgroundColor: memberColor ? `${memberColor}20` : '#3B82F620',
+                              borderColor: memberColor ? `${memberColor}60` : '#3B82F660',
+                              color: memberColor || '#3B82F6',
+                            }}
+                          >
+                            <Users className="w-2.5 h-2.5" />
+                            <span>Team: {item.teamMemberName}</span>
+                          </span>
                         )}
 
                         <span className="bg-neutral-800/80 text-neutral-400 text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider font-semibold">

@@ -11,6 +11,8 @@ interface DonationSimulatorProps {
     currency?: string;
     comment?: string;
     campaignName?: string;
+    teamMemberName?: string;
+    isAuctionDonation?: boolean;
     totalRaised?: number;
     targetGoal?: number;
     reward?: ClaimedReward;
@@ -21,12 +23,36 @@ interface DonationSimulatorProps {
 
 const DONATION_PRESETS = [
   {
+    name: '🔨 Auction Win Donation',
+    donor: 'Nerdy_Mike',
+    email: 'nerdy.mike@example.com',
+    amount: 10.50,
+    currency: 'USD',
+    comment: 'Auction item: Luffy x Round1 Promo Card winning bid payment! 🔨🎉',
+    teamMemberName: undefined,
+    isAuctionDonation: true,
+    reward: undefined,
+  },
+  {
+    name: '👤 Team Supporter (Sarah_Gamer)',
+    donor: 'PixelFanatic',
+    email: 'fan@example.com',
+    amount: 50.0,
+    currency: 'USD',
+    comment: 'Supporting Sarah in the 12-hour team stream marathon! Let us hit that stretch goal! 🎮💜',
+    teamMemberName: 'Sarah_Gamer',
+    isAuctionDonation: false,
+    reward: undefined,
+  },
+  {
     name: '🌟 Coffee Supporter',
     donor: 'Sam Sparks',
     email: 'sam@example.com',
     amount: 5.0,
     currency: 'USD',
     comment: 'Keep up the awesome streaming today! Every bit counts! ☕',
+    teamMemberName: undefined,
+    isAuctionDonation: false,
     reward: undefined,
   },
   {
@@ -163,6 +189,8 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
   const [currency, setCurrency] = useState('USD');
   const [comment, setComment] = useState('Claimed the limited edition hoodie reward! Cant wait for stream milestones! 🧥✨');
   const [campaignName, setCampaignName] = useState(defaultCampaignName);
+  const [teamMemberName, setTeamMemberName] = useState('');
+  const [isAuctionDonation, setIsAuctionDonation] = useState(false);
 
   // Reward state
   const [includeReward, setIncludeReward] = useState(true);
@@ -203,6 +231,8 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
     setAmount(p.amount);
     setCurrency(p.currency);
     setComment(p.comment);
+    setTeamMemberName(p.teamMemberName || '');
+    setIsAuctionDonation(Boolean(p.isAuctionDonation));
 
     if (p.reward) {
       setIncludeReward(true);
@@ -336,6 +366,8 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
           currency,
           comment: comment.trim(),
           campaignName: campaignName.trim(),
+          teamMemberName: teamMemberName.trim() || undefined,
+          isAuctionDonation: isAuctionDonation,
           totalRaised: 3625,
           targetGoal: 5000,
           reward: rewardObj,
@@ -710,6 +742,40 @@ export const DonationSimulator: React.FC<DonationSimulatorProps> = ({
                   placeholder="Leave a message..."
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
+              </div>
+            </div>
+
+            {/* Team Campaign & Auction Donation Options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-neutral-950/40 border border-neutral-800 rounded-xl p-3">
+              <div>
+                <label className="text-xs font-medium text-neutral-300 block mb-1">
+                  👤 Supporting Team Member (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={teamMemberName}
+                  onChange={(e) => setTeamMemberName(e.target.value)}
+                  placeholder="e.g. Sarah_Gamer, Captain Spark"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <span className="text-[10px] text-neutral-500 mt-0.5 block">
+                  Simulates a donation credited to a specific streamer in a team campaign.
+                </span>
+              </div>
+
+              <div className="flex flex-col justify-center">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-amber-300">
+                  <input
+                    type="checkbox"
+                    checked={isAuctionDonation}
+                    onChange={(e) => setIsAuctionDonation(e.target.checked)}
+                    className="rounded bg-neutral-950 border-neutral-800 text-amber-500 focus:ring-amber-500 w-4 h-4"
+                  />
+                  <span>🔨 Is Auction Winning Bid Donation</span>
+                </label>
+                <span className="text-[10px] text-neutral-400 mt-1 pl-6">
+                  Matches the auction accent color (#F59E0B) in Discord and live feed badges.
+                </span>
               </div>
             </div>
 

@@ -801,6 +801,7 @@ export default function App() {
             <DiscordConfigCard
               config={discordConfig}
               campaignName={tiltifyConfig.campaignName || discordConfig.campaignName}
+              donations={donations}
               onSave={handleSaveDiscord}
               onTest={handleTestDiscord}
               onCampaignNameChange={handleCampaignNameChange}
@@ -838,6 +839,7 @@ export default function App() {
           {activeTab === 'feed' && (
             <LiveFeed
               donations={donations}
+              discordConfig={discordConfig}
               onResend={handleResendDonation}
               onClear={handleClearDonations}
               isLoading={isLoading}
