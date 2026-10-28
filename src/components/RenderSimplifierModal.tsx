@@ -36,8 +36,8 @@ export const RenderSimplifierModal: React.FC<RenderSimplifierModalProps> = ({
   discordConfig,
   tiltifyConfig,
 }) => {
-  // View mode: 'step_cards' (stupid-proof cards) vs 'bulk_env' (for Render's bulk editor)
-  const [viewMode, setViewMode] = useState<'step_cards' | 'bulk_env'>('step_cards');
+  // View mode: 'step_cards' vs 'bulk_env' vs 'secret_file' (Render Secret Files)
+  const [viewMode, setViewMode] = useState<'step_cards' | 'bulk_env' | 'secret_file'>('step_cards');
 
   // Feature Toggles (Stupid-proof selectors)
   const [useSeparateAuctionChannel, setUseSeparateAuctionChannel] = useState<boolean>(() => {
@@ -49,7 +49,13 @@ export const RenderSimplifierModal: React.FC<RenderSimplifierModalProps> = ({
   const [useAdminPassword, setUseAdminPassword] = useState<boolean>(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState<string>('MySecurePassword123');
   const [useBranding, setUseBranding] = useState<boolean>(() => {
-    return Boolean(discordConfig.footerText);
+    return Boolean(discordConfig.footerText || discordConfig.auctionFooterText || discordConfig.showEmbedTimestamp !== undefined);
+  });
+  const [useBotIdentity, setUseBotIdentity] = useState<boolean>(() => {
+    return Boolean(
+      (discordConfig.botUsername && discordConfig.botUsername !== 'Tiltify Donation Bot') ||
+      (discordConfig.botAvatarUrl && discordConfig.botAvatarUrl !== 'https://tiltify.com/favicon.ico')
+    );
   });
   const [dualPostAuctions, setDualPostAuctions] = useState<boolean>(() => {
     return Boolean(discordConfig.dualPostAuctions);
@@ -220,15 +226,80 @@ export const RenderSimplifierModal: React.FC<RenderSimplifierModalProps> = ({
     });
   }
 
-  // 6. Embed Branding
+  // 6. Bot Identity
+  if (useBotIdentity) {
+    if (discordConfig.botUsername) {
+      activeVariables.push({
+        id: 'DISCORD_BOT_USERNAME',
+        key: 'DISCORD_BOT_USERNAME',
+        value: discordConfig.botUsername,
+        title: 'Bot Username',
+        feature: 'Bot Identity',
+        description: 'The name displayed on Discord embeds sent by the bot.',
+        required: false,
+        badgeColor: 'teal',
+      });
+    }
+    if (discordConfig.botAvatarUrl) {
+      activeVariables.push({
+        id: 'DISCORD_BOT_AVATAR_URL',
+        key: 'DISCORD_BOT_AVATAR_URL',
+        value: discordConfig.botAvatarUrl,
+        title: 'Bot Avatar Icon URL',
+        feature: 'Bot Identity',
+        description: 'Direct image URL for the bot avatar on Discord.',
+        required: false,
+        badgeColor: 'teal',
+      });
+    }
+  }
+
+  // 7. Embed Branding & Timestamp
   if (useBranding) {
     activeVariables.push({
       id: 'DISCORD_FOOTER_TEXT',
       key: 'DISCORD_FOOTER_TEXT',
-      value: discordConfig.footerText || 'Charity Stream 2026 • Live Event',
+      value: discordConfig.footerText || 'Tiltify Donation Alerts',
       title: 'Embed Footer Text',
       feature: 'Branding',
-      description: 'Custom text placed at the very bottom of Discord alerts.',
+      description: 'Custom text placed at the very bottom of Discord donation alerts.',
+      required: false,
+      badgeColor: 'indigo',
+    });
+
+    if (discordConfig.auctionFooterText) {
+      activeVariables.push({
+        id: 'DISCORD_AUCTION_FOOTER_TEXT',
+        key: 'DISCORD_AUCTION_FOOTER_TEXT',
+        value: discordConfig.auctionFooterText,
+        title: 'Auction Footer Text',
+        feature: 'Branding',
+        description: 'Custom text at the bottom of auction win alerts.',
+        required: false,
+        badgeColor: 'amber',
+      });
+    }
+
+    if (discordConfig.footerIconUrl) {
+      activeVariables.push({
+        id: 'DISCORD_FOOTER_ICON_URL',
+        key: 'DISCORD_FOOTER_ICON_URL',
+        value: discordConfig.footerIconUrl,
+        title: 'Footer Icon URL',
+        feature: 'Branding',
+        description: 'Small icon URL displayed next to the footer text.',
+        required: false,
+        badgeColor: 'indigo',
+      });
+    }
+
+    activeVariables.push({
+      id: 'DISCORD_SHOW_EMBED_TIMESTAMP',
+      key: 'DISCORD_SHOW_EMBED_TIMESTAMP',
+      value: String(discordConfig.showEmbedTimestamp !== false),
+      title: 'Show Embed Timestamp',
+      feature: 'Branding',
+      description: 'Whether to show the timestamp in Discord embed footers.',
       required: false,
       badgeColor: 'indigo',
     });
@@ -489,7 +560,38 @@ export const RenderSimplifierModal: React.FC<RenderSimplifierModalProps> = ({
                   </div>
                 </label>
                 <span className="text-[10px] text-neutral-400 font-mono shrink-0 pl-2">
-                  {useBranding ? '+1 variable' : 'Off'}
+                  {useBranding ? '+4 variables' : 'Off'}
+                </span>
+              </div>
+            </div>
+
+            {/* Feature 6: Bot Identity */}
+            <div
+              className={`p-3 rounded-xl border transition-all ${
+                useBotIdentity
+                  ? 'bg-teal-950/30 border-teal-500/60 ring-1 ring-teal-500/30'
+                  : 'bg-neutral-900/50 border-neutral-800'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useBotIdentity}
+                    onChange={(e) => setUseBotIdentity(e.target.checked)}
+                    className="mt-0.5 rounded bg-neutral-800 border-neutral-700 text-teal-500 focus:ring-teal-500 w-4 h-4"
+                  />
+                  <div>
+                    <div className="font-semibold text-teal-200 flex items-center gap-2">
+                      <span>🤖 Custom Bot Identity &amp; Avatar Icon</span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-0.5">
+                      Persists your custom bot username ({discordConfig.botUsername || 'Tiltify Donation Bot'}) and avatar icon across redeploys.
+                    </p>
+                  </div>
+                </label>
+                <span className="text-[10px] text-neutral-400 font-mono shrink-0 pl-2">
+                  {useBotIdentity ? '+2 variables' : 'Off'}
                 </span>
               </div>
             </div>
@@ -497,39 +599,126 @@ export const RenderSimplifierModal: React.FC<RenderSimplifierModalProps> = ({
         </div>
 
         {/* View Mode Switcher */}
-        <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 border-b border-neutral-800 pb-2">
           <div>
             <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Step 2: Add these {activeVariables.length} variables to Render</span>
+              <span>Step 2: Choose how to save to Render</span>
             </span>
           </div>
 
-          <div className="flex items-center bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 text-xs">
+          <div className="flex items-center bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 text-xs overflow-x-auto">
+            <button
+              onClick={() => setViewMode('secret_file')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 shrink-0 ${
+                viewMode === 'secret_file'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-neutral-400 hover:text-neutral-200'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Secret File (1-Click Permanent)</span>
+            </button>
             <button
               onClick={() => setViewMode('step_cards')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 shrink-0 ${
                 viewMode === 'step_cards'
                   ? 'bg-neutral-800 text-white shadow-sm'
                   : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
               <Layers className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Step-by-Step Cards (Stupid Proof)</span>
+              <span>Step-by-Step Cards</span>
             </button>
             <button
               onClick={() => setViewMode('bulk_env')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 shrink-0 ${
                 viewMode === 'bulk_env'
                   ? 'bg-neutral-800 text-white shadow-sm'
                   : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
               <FileCode className="w-3.5 h-3.5 text-teal-400" />
-              <span>Bulk .env Mode</span>
+              <span>Bulk .env</span>
             </button>
           </div>
         </div>
+
+        {/* MODE S: RENDER SECRET FILE (100% Guaranteed Persistence) */}
+        {viewMode === 'secret_file' && (
+          <div className="bg-neutral-950 border border-emerald-500/40 rounded-xl p-4 mb-5 space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Render Secret File: config.json</span>
+                  </span>
+                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    Recommended • Never Resets on Git Push
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 mt-1">
+                  Render disks are ephemeral and reset on new git commits. Adding a <strong>Secret File</strong> permanently stores all footer branding, timestamps, bot identity, and webhook settings in Render with 1 copy-paste!
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleCopy('secretFileJson', JSON.stringify({
+                  discord: {
+                    ...discordConfig,
+                    separateAuctionChannel: useSeparateAuctionChannel,
+                    auctionWebhookUrl: useSeparateAuctionChannel ? effectiveAuctionWebhook : undefined,
+                    dualPostAuctions: useSeparateAuctionChannel ? dualPostAuctions : false,
+                  },
+                  tiltify: tiltifyConfig,
+                }, null, 2))}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-md shrink-0"
+              >
+                {copiedKey === 'secretFileJson' ? (
+                  <>
+                    <Check className="w-4 h-4 text-white" />
+                    <span>Copied config.json!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    <span>Copy config.json</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Step-by-step 3-click guide */}
+            <div className="bg-neutral-900/90 border border-neutral-800 rounded-lg p-3 text-xs space-y-2">
+              <div className="font-semibold text-emerald-300 text-[11px] uppercase tracking-wider">
+                How to set this up in Render (Takes 30 seconds):
+              </div>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] text-neutral-300">
+                <li>In your Render Dashboard, click your Web Service.</li>
+                <li>In the left sidebar, click <strong>Secret Files</strong>.</li>
+                <li>Click <strong>Add Secret File</strong>.</li>
+                <li>Set <strong>Filename</strong> to: <code className="bg-neutral-950 px-1.5 py-0.5 rounded font-mono text-emerald-400">config.json</code></li>
+                <li>Paste the copied JSON into the text box and click <strong>Save Changes</strong>.</li>
+              </ol>
+            </div>
+
+            <textarea
+              readOnly
+              rows={8}
+              value={JSON.stringify({
+                discord: {
+                  ...discordConfig,
+                  separateAuctionChannel: useSeparateAuctionChannel,
+                  auctionWebhookUrl: useSeparateAuctionChannel ? effectiveAuctionWebhook : undefined,
+                  dualPostAuctions: useSeparateAuctionChannel ? dualPostAuctions : false,
+                },
+                tiltify: tiltifyConfig,
+              }, null, 2)}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-3 text-[11px] font-mono text-neutral-200 resize-none focus:outline-none"
+            />
+          </div>
+        )}
 
         {/* MODE A: STUPID-PROOF STEP-BY-STEP CARDS */}
         {viewMode === 'step_cards' && (

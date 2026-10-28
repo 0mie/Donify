@@ -59,16 +59,17 @@ const state: {
     webhookUrl: (process.env.DISCORD_WEBHOOK_URL || "").trim(),
     botToken: (process.env.DISCORD_BOT_TOKEN || "").trim(),
     channelId: (process.env.DISCORD_CHANNEL_ID || "").trim(),
-    botUsername: "Tiltify Donation Bot",
-    botAvatarUrl: "https://tiltify.com/favicon.ico",
-    embedColor: "#00d1b2",
-    auctionEmbedColor: "#F59E0B",
-    mentionType: "none",
-    mentionRoleId: "",
-    mentionUserId: "",
-    includeComment: true,
-    includeCampaignDetails: true,
-    includeCampaignProgress: true,
+    botUsername: (process.env.DISCORD_BOT_USERNAME || "Tiltify Donation Bot").trim(),
+    botAvatarUrl: (process.env.DISCORD_BOT_AVATAR_URL || "https://tiltify.com/favicon.ico").trim(),
+    embedColor: (process.env.DISCORD_EMBED_COLOR || "#00d1b2").trim(),
+    auctionEmbedColor: (process.env.DISCORD_AUCTION_EMBED_COLOR || "#F59E0B").trim(),
+    mentionType: (process.env.DISCORD_MENTION_TYPE as any) || "none",
+    mentionRoleId: (process.env.DISCORD_MENTION_ROLE_ID || "").trim(),
+    mentionUserId: (process.env.DISCORD_MENTION_USER_ID || "").trim(),
+    includeComment: process.env.DISCORD_INCLUDE_COMMENT !== "false",
+    includeCampaignDetails: process.env.DISCORD_INCLUDE_CAMPAIGN_DETAILS !== "false",
+    includeCampaignProgress: process.env.DISCORD_INCLUDE_CAMPAIGN_PROGRESS !== "false",
+    showEmbedTimestamp: process.env.DISCORD_SHOW_EMBED_TIMESTAMP !== "false" && process.env.DISCORD_INCLUDE_TIMESTAMP !== "false",
     customMessagePrefix: "🎉 New donation received on Tiltify!",
     includeRewardDetails: true,
     includeDeliveryAddress: true,
@@ -390,11 +391,13 @@ function loadDonationsFromDisk(): boolean {
             state.botStatus.lastDonationTimestamp = parsed.botStatus.lastDonationTimestamp;
           }
         }
-        // Ensure totalAmountProcessed is never less than the actual sum of restored donations
+        deduplicateStateDonations();
+        // Ensure totalAmountProcessed is based on clean deduplicated donations
         const calculatedDonationsSum = state.donations.reduce((sum, d) => sum + (typeof d.amount === "number" && !isNaN(d.amount) ? d.amount : 0), 0);
-        if (calculatedDonationsSum > state.botStatus.totalAmountProcessed) {
+        if (calculatedDonationsSum > state.botStatus.totalAmountProcessed || state.botStatus.totalAmountProcessed > calculatedDonationsSum * 1.5) {
           state.botStatus.totalAmountProcessed = calculatedDonationsSum;
         }
+        state.botStatus.totalDonationsProcessed = state.donations.length;
         console.log(`[Donations Persistence] Restored ${state.donations.length} records and ${state.seenDonationIds.size} seen IDs from disk`);
         return true;
       }
@@ -466,7 +469,25 @@ function applyConfigObject(parsed: any, sourceName: string) {
       state.discord.teamMemberColors = typeof parsed.DISCORD_TEAM_MEMBER_COLORS === "string" ? JSON.parse(parsed.DISCORD_TEAM_MEMBER_COLORS) : parsed.DISCORD_TEAM_MEMBER_COLORS;
     } catch {}
   }
+  if (parsed.DISCORD_BOT_USERNAME && String(parsed.DISCORD_BOT_USERNAME).trim()) state.discord.botUsername = String(parsed.DISCORD_BOT_USERNAME).trim();
+  if (parsed.DISCORD_BOT_AVATAR_URL && String(parsed.DISCORD_BOT_AVATAR_URL).trim()) state.discord.botAvatarUrl = String(parsed.DISCORD_BOT_AVATAR_URL).trim();
   if (parsed.DISCORD_FOOTER_TEXT && String(parsed.DISCORD_FOOTER_TEXT).trim()) state.discord.footerText = String(parsed.DISCORD_FOOTER_TEXT).trim();
+  if (parsed.DISCORD_FOOTER_ICON_URL && String(parsed.DISCORD_FOOTER_ICON_URL).trim()) state.discord.footerIconUrl = String(parsed.DISCORD_FOOTER_ICON_URL).trim();
+  if (parsed.DISCORD_AUCTION_FOOTER_TEXT && String(parsed.DISCORD_AUCTION_FOOTER_TEXT).trim()) state.discord.auctionFooterText = String(parsed.DISCORD_AUCTION_FOOTER_TEXT).trim();
+  if (parsed.DISCORD_SHOW_EMBED_TIMESTAMP !== undefined) {
+    state.discord.showEmbedTimestamp = parsed.DISCORD_SHOW_EMBED_TIMESTAMP === true || parsed.DISCORD_SHOW_EMBED_TIMESTAMP === "true";
+  }
+  if (parsed.DISCORD_INCLUDE_TIMESTAMP !== undefined) {
+    state.discord.showEmbedTimestamp = parsed.DISCORD_INCLUDE_TIMESTAMP === true || parsed.DISCORD_INCLUDE_TIMESTAMP === "true";
+  }
+  if (parsed.DISCORD_EMBED_COLOR && String(parsed.DISCORD_EMBED_COLOR).trim()) state.discord.embedColor = String(parsed.DISCORD_EMBED_COLOR).trim();
+  if (parsed.DISCORD_AUCTION_EMBED_COLOR && String(parsed.DISCORD_AUCTION_EMBED_COLOR).trim()) state.discord.auctionEmbedColor = String(parsed.DISCORD_AUCTION_EMBED_COLOR).trim();
+  if (parsed.DISCORD_EMBED_LAYOUT && String(parsed.DISCORD_EMBED_LAYOUT).trim()) state.discord.embedLayout = String(parsed.DISCORD_EMBED_LAYOUT).trim() as any;
+  if (parsed.DISCORD_EMBED_TITLE_TEMPLATE && String(parsed.DISCORD_EMBED_TITLE_TEMPLATE).trim()) state.discord.embedTitleTemplate = String(parsed.DISCORD_EMBED_TITLE_TEMPLATE).trim();
+  if (parsed.DISCORD_EMBED_DESCRIPTION_TEMPLATE && String(parsed.DISCORD_EMBED_DESCRIPTION_TEMPLATE).trim()) state.discord.embedDescriptionTemplate = String(parsed.DISCORD_EMBED_DESCRIPTION_TEMPLATE).trim();
+  if (parsed.DISCORD_AUCTION_TITLE_TEMPLATE && String(parsed.DISCORD_AUCTION_TITLE_TEMPLATE).trim()) state.discord.auctionTitleTemplate = String(parsed.DISCORD_AUCTION_TITLE_TEMPLATE).trim();
+  if (parsed.DISCORD_AUCTION_MESSAGE_PREFIX && String(parsed.DISCORD_AUCTION_MESSAGE_PREFIX).trim()) state.discord.auctionMessagePrefix = String(parsed.DISCORD_AUCTION_MESSAGE_PREFIX).trim();
+  if (parsed.DISCORD_CUSTOM_MESSAGE_PREFIX && String(parsed.DISCORD_CUSTOM_MESSAGE_PREFIX).trim()) state.discord.customMessagePrefix = String(parsed.DISCORD_CUSTOM_MESSAGE_PREFIX).trim();
   if (parsed.TILTIFY_CAMPAIGN_ID && String(parsed.TILTIFY_CAMPAIGN_ID).trim()) state.tiltify.campaignId = String(parsed.TILTIFY_CAMPAIGN_ID).trim();
   if (parsed.TILTIFY_CAMPAIGN_NAME && String(parsed.TILTIFY_CAMPAIGN_NAME).trim()) state.tiltify.campaignName = String(parsed.TILTIFY_CAMPAIGN_NAME).trim();
   if (parsed.TILTIFY_CLIENT_ID && String(parsed.TILTIFY_CLIENT_ID).trim()) state.tiltify.clientId = String(parsed.TILTIFY_CLIENT_ID).trim();
@@ -631,7 +652,19 @@ function loadConfigFromDisk() {
     if (process.env.DISCORD_AUCTION_MENTION_ROLE_ID) {
       state.discord.auctionMentionRoleId = process.env.DISCORD_AUCTION_MENTION_ROLE_ID.trim();
     }
+    if (process.env.DISCORD_BOT_USERNAME) state.discord.botUsername = process.env.DISCORD_BOT_USERNAME.trim();
+    if (process.env.DISCORD_BOT_AVATAR_URL) state.discord.botAvatarUrl = process.env.DISCORD_BOT_AVATAR_URL.trim();
     if (process.env.DISCORD_FOOTER_TEXT) state.discord.footerText = process.env.DISCORD_FOOTER_TEXT.trim();
+    if (process.env.DISCORD_FOOTER_ICON_URL) state.discord.footerIconUrl = process.env.DISCORD_FOOTER_ICON_URL.trim();
+    if (process.env.DISCORD_AUCTION_FOOTER_TEXT) state.discord.auctionFooterText = process.env.DISCORD_AUCTION_FOOTER_TEXT.trim();
+    if (process.env.DISCORD_SHOW_EMBED_TIMESTAMP !== undefined) {
+      state.discord.showEmbedTimestamp = process.env.DISCORD_SHOW_EMBED_TIMESTAMP === "true";
+    }
+    if (process.env.DISCORD_INCLUDE_TIMESTAMP !== undefined) {
+      state.discord.showEmbedTimestamp = process.env.DISCORD_INCLUDE_TIMESTAMP === "true";
+    }
+    if (process.env.DISCORD_EMBED_COLOR) state.discord.embedColor = process.env.DISCORD_EMBED_COLOR.trim();
+    if (process.env.DISCORD_AUCTION_EMBED_COLOR) state.discord.auctionEmbedColor = process.env.DISCORD_AUCTION_EMBED_COLOR.trim();
     if (process.env.TILTIFY_CLIENT_ID) state.tiltify.clientId = process.env.TILTIFY_CLIENT_ID.trim();
     if (process.env.TILTIFY_CLIENT_SECRET) state.tiltify.clientSecret = process.env.TILTIFY_CLIENT_SECRET.trim();
     if (process.env.TILTIFY_API_TOKEN) state.tiltify.apiToken = process.env.TILTIFY_API_TOKEN.trim();
@@ -1330,15 +1363,6 @@ function buildDiscordEmbed(
     }
 
     const layout = config.embedLayout || "modern";
-
-    // 🔨 Auction Donation Badge Field
-    if (shouldMatchAuctionColor) {
-      embedFields.push({
-        name: "🔨 Auction Winning Donation",
-        value: `This donation is linked to an auction winning bid on **${donation.campaignName || "the campaign"}**!`,
-        inline: false,
-      });
-    }
 
     if (layout === "compact") {
       // COMPACT LAYOUT: Streamlined, high-density presentation for active streams
@@ -2663,6 +2687,163 @@ async function fetchAllCampaignAuctions(
   };
 }
 
+// Helper to match an auction item with an existing donation or create an auction record without duplicating
+function mergeOrEnrichAuctionDonation(
+  itemWinner: any,
+  defaultCampaignName: string,
+  defaultCampaignId: string
+): { enriched: boolean; created: boolean; record: DonationRecord } {
+  const aucId = String(itemWinner.itemId || itemWinner.id || `auc-${Date.now()}`);
+  const wName = (itemWinner.winnerName || "").trim().toLowerCase();
+  const wBid = itemWinner.winningBid || 0;
+
+  let resolvedAddress = itemWinner.shippingAddress;
+  let resolvedEmail = itemWinner.winnerEmail;
+  if (isSurveyPlaceholder(resolvedAddress)) resolvedAddress = undefined;
+  if (isSurveyPlaceholder(resolvedEmail)) resolvedEmail = undefined;
+
+  const auctionInfo: AuctionWinnerInfo = {
+    auctionId: String(itemWinner.itemId || itemWinner.id),
+    itemTitle: itemWinner.itemTitle || "Auction Item",
+    itemDescription: itemWinner.itemDescription,
+    winningBid: wBid,
+    currency: itemWinner.currency || "USD",
+    winnerName: itemWinner.winnerName || "Auction Winner",
+    winnerEmail: resolvedEmail,
+    prizeType: itemWinner.prizeType || "physical",
+    shippingAddress: resolvedAddress,
+    specialInstructions: isSurveyPlaceholder(itemWinner.specialInstructions) ? undefined : itemWinner.specialInstructions,
+    shippingStatus: "pending",
+    endedAt: itemWinner.endedAt || new Date().toISOString(),
+    rawItem: itemWinner.rawPayload,
+  };
+
+  // 1. Direct ID match
+  let matchIndex = state.donations.findIndex(
+    (d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId || d.auction?.auctionId === aucId
+  );
+
+  // 2. Match by donor name and amount
+  if (matchIndex === -1 && wBid > 0 && wName) {
+    matchIndex = state.donations.findIndex((d) => {
+      const dName = (d.donorName || d.auction?.winnerName || "").trim().toLowerCase();
+      const sameAmount = Math.abs((d.amount || d.auction?.winningBid || 0) - wBid) < 0.05;
+      if (!sameAmount) return false;
+      return dName === wName || dName.includes(wName) || wName.includes(dName);
+    });
+  }
+
+  // 3. Match by comment mentioning auction or item title with matching amount
+  if (matchIndex === -1 && wBid > 0) {
+    const itemTitleLower = (itemWinner.itemTitle || "").toLowerCase();
+    matchIndex = state.donations.findIndex((d) => {
+      const sameAmount = Math.abs((d.amount || 0) - wBid) < 0.05;
+      if (!sameAmount) return false;
+      const commentLower = (d.comment || "").toLowerCase();
+      return (
+        commentLower.includes("auction") ||
+        commentLower.includes("winning bid") ||
+        (itemTitleLower.length > 5 && commentLower.includes(itemTitleLower))
+      );
+    });
+  }
+
+  if (matchIndex !== -1) {
+    // Enrich existing generic donation into an auction-winning fulfillment record
+    const target = state.donations[matchIndex];
+    target.eventType = "auction_ended";
+    target.isAuctionDonation = true;
+    target.amount = wBid > 0 ? wBid : target.amount;
+    if (itemWinner.winnerName) target.donorName = itemWinner.winnerName;
+    if (resolvedEmail && !target.donorEmail) target.donorEmail = resolvedEmail;
+
+    target.auction = {
+      ...auctionInfo,
+      shippingAddress: resolvedAddress || target.auction?.shippingAddress,
+      winnerEmail: resolvedEmail || target.auction?.winnerEmail || target.donorEmail,
+      specialInstructions: auctionInfo.specialInstructions || target.auction?.specialInstructions,
+      shippingStatus: target.auction?.shippingStatus || "pending",
+      trackingNumber: target.auction?.trackingNumber,
+      fulfillmentNotes: target.auction?.fulfillmentNotes,
+    };
+
+    state.seenAuctionIds.add(aucId);
+    return { enriched: true, created: false, record: target };
+  }
+
+  // If no matching donation exists, create a new auction record
+  const newRecord: DonationRecord = {
+    id: `auc-${aucId}`,
+    tiltifyId: aucId,
+    eventType: "auction_ended",
+    isAuctionDonation: true,
+    donorName: auctionInfo.winnerName,
+    donorEmail: auctionInfo.winnerEmail,
+    amount: auctionInfo.winningBid,
+    currency: auctionInfo.currency,
+    auction: auctionInfo,
+    campaignName: defaultCampaignName,
+    campaignId: defaultCampaignId,
+    receivedAt: auctionInfo.endedAt || new Date().toISOString(),
+    source: "poll",
+    discordStatus: "pending",
+    rawPayload: itemWinner.rawPayload,
+  };
+
+  state.donations.push(newRecord);
+  state.seenAuctionIds.add(aucId);
+  return { enriched: false, created: true, record: newRecord };
+}
+
+// Purge duplicate records where both an auction record and a generic donation exist for the same auction win
+function deduplicateStateDonations() {
+  const toRemoveIndices = new Set<number>();
+
+  for (let i = 0; i < state.donations.length; i++) {
+    const a = state.donations[i];
+    const isAuctionA = a.eventType === "auction_ended" || Boolean(a.auction);
+    if (!isAuctionA) continue;
+
+    const wNameA = (a.auction?.winnerName || a.donorName || "").trim().toLowerCase();
+    const amountA = a.amount || a.auction?.winningBid || 0;
+    if (!wNameA || amountA <= 0) continue;
+
+    for (let j = 0; j < state.donations.length; j++) {
+      if (i === j) continue;
+      const b = state.donations[j];
+      const isAuctionB = b.eventType === "auction_ended" || Boolean(b.auction);
+
+      // Duplicate auction check
+      if (isAuctionB) {
+        if (
+          b.auction?.auctionId &&
+          a.auction?.auctionId &&
+          b.auction.auctionId === a.auction.auctionId
+        ) {
+          toRemoveIndices.add(Math.max(i, j));
+        }
+        continue;
+      }
+
+      // If B is a generic donation matching auction A
+      const dNameB = (b.donorName || "").trim().toLowerCase();
+      const amountB = b.amount || 0;
+      const sameAmount = Math.abs(amountA - amountB) < 0.05;
+
+      if (sameAmount && (dNameB === wNameA || dNameB.includes(wNameA) || wNameA.includes(dNameB))) {
+        if (b.comment && !a.comment) a.comment = b.comment;
+        if (b.discordStatus === "sent") a.discordStatus = "sent";
+        toRemoveIndices.add(j);
+      }
+    }
+  }
+
+  if (toRemoveIndices.size > 0) {
+    state.donations = state.donations.filter((_, idx) => !toRemoveIndices.has(idx));
+    console.log(`[Deduplication] Removed ${toRemoveIndices.size} duplicate donation record(s) matching completed auctions.`);
+  }
+}
+
 // Helper to query Tiltify v5 API for campaign total amount raised & goal progress
 async function fetchLiveCampaignSummary(
   campaignId?: string,
@@ -3339,150 +3520,36 @@ async function executeTiltifyPoll(): Promise<{ count: number; message: string }>
           maxPages: 10,
         });
 
+        const effectiveCampaignName =
+          state.tiltify.campaignName?.trim() ||
+          state.discord.campaignName?.trim() ||
+          campaignSummary?.campaignName ||
+          "Tiltify Campaign";
+
         for (const itemWinner of fullFetch.auctions) {
-          const aucId = itemWinner.itemId;
           const isAuctionEnded = itemWinner.status === "completed" || Boolean(itemWinner.endedAt && new Date(itemWinner.endedAt).getTime() <= Date.now());
           if (!isAuctionEnded) continue;
-
-          // Never process auctions that have 0 bids (unsold items)
           if (!itemWinner.winningBid || itemWinner.winningBid <= 0) continue;
 
-          // Check if already in state.donations as an auction record
-          const existingAuctionIndex = state.donations.findIndex(
-            (d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId || d.auction?.auctionId === aucId
-          );
+          const { enriched, created, record } = mergeOrEnrichAuctionDonation(itemWinner, effectiveCampaignName, campaignId);
 
-          // Resolve recipient address and email if missing or survey placeholder:
-          let resolvedAddress = itemWinner.shippingAddress;
-          let resolvedEmail = itemWinner.winnerEmail;
-
-          if (isSurveyPlaceholder(resolvedAddress)) resolvedAddress = undefined;
-          if (isSurveyPlaceholder(resolvedEmail)) resolvedEmail = undefined;
-
-          if (!resolvedAddress || !resolvedEmail) {
-            const lookupKey = (itemWinner.winnerName || "").trim().toLowerCase();
-            const KNOWN_WINNER_INFO: Record<string, { address: RewardDeliveryAddress; email?: string }> = {
-              "dakman": {
-                address: { recipientName: "Dakman", addressLine1: "100 Charity Way", city: "Portland", region: "OR", postalCode: "97201", country: "United States" },
-              },
-              "cristian hernandez": {
-                address: { recipientName: "Cristian Hernandez", addressLine1: "789 Hope Way", city: "Los Angeles", region: "CA", postalCode: "90001", country: "United States" },
-              },
-              "charity supporter #2": {
-                address: { recipientName: "Charity Supporter #2", addressLine1: "250 Champion Ave", city: "Seattle", region: "WA", postalCode: "98101", country: "United States" },
-              },
-              "charity supporter #4": {
-                address: { recipientName: "Charity Supporter #4", addressLine1: "321 Beacon St", city: "Austin", region: "TX", postalCode: "78701", country: "United States" },
-              },
-            };
-            if (KNOWN_WINNER_INFO[lookupKey]) {
-              if (!resolvedAddress) resolvedAddress = KNOWN_WINNER_INFO[lookupKey].address;
-              if (!resolvedEmail && KNOWN_WINNER_INFO[lookupKey].email) resolvedEmail = KNOWN_WINNER_INFO[lookupKey].email;
-            }
-            const knownSupporter = state.donations.find((d) => {
-              const dName = (d.donorName || d.auction?.winnerName || "").trim().toLowerCase();
-              return dName && lookupKey && (dName === lookupKey || dName.includes(lookupKey) || lookupKey.includes(dName));
-            });
-            if (knownSupporter) {
-              if (!resolvedAddress && knownSupporter.auction?.shippingAddress && !isSurveyPlaceholder(knownSupporter.auction.shippingAddress)) {
-                resolvedAddress = knownSupporter.auction.shippingAddress;
-              } else if (!resolvedAddress && knownSupporter.reward?.shippingAddress && !isSurveyPlaceholder(knownSupporter.reward.shippingAddress)) {
-                resolvedAddress = knownSupporter.reward.shippingAddress;
-              }
-              if (!resolvedEmail && knownSupporter.auction?.winnerEmail && !isSurveyPlaceholder(knownSupporter.auction.winnerEmail)) {
-                resolvedEmail = knownSupporter.auction.winnerEmail;
-              } else if (!resolvedEmail && knownSupporter.donorEmail && !isSurveyPlaceholder(knownSupporter.donorEmail)) {
-                resolvedEmail = knownSupporter.donorEmail;
-              }
-            }
-          }
-
-          if (existingAuctionIndex === -1) {
-            // Check if a generic donation came in from /donations polling matching this winner or payment:
-            const genericIndex = state.donations.findIndex(
-              (d) => !d.auction && d.eventType !== "auction_ended" &&
-                ((d.donorName && d.donorName.toLowerCase() === itemWinner.winnerName.toLowerCase()) ||
-                 (d.amount <= 2.01 && (itemWinner.winningBid <= 2.01 || Math.abs(d.amount - itemWinner.winningBid) < 0.01)))
-            );
-
-            const effectiveCampaignName =
-              state.tiltify.campaignName?.trim() ||
-              state.discord.campaignName?.trim() ||
-              campaignSummary?.campaignName ||
-              "Tiltify Campaign";
-
-            const auctionRecord: DonationRecord = {
-              id: `auc-${aucId}`,
-              tiltifyId: aucId,
-              eventType: "auction_ended",
-              donorName: itemWinner.winnerName,
-              donorEmail: resolvedEmail,
-              amount: itemWinner.winningBid,
-              currency: itemWinner.currency,
-              auction: {
-                auctionId: itemWinner.itemId,
-                itemTitle: itemWinner.itemTitle,
-                itemDescription: itemWinner.itemDescription,
-                winningBid: itemWinner.winningBid,
-                currency: itemWinner.currency,
-                winnerName: itemWinner.winnerName,
-                winnerEmail: resolvedEmail,
-                endedAt: itemWinner.endedAt,
-                prizeType: itemWinner.prizeType || "physical",
-                prizeDetails: itemWinner.itemTitle,
-                shippingAddress: resolvedAddress,
-                specialInstructions: itemWinner.specialInstructions,
-                shippingStatus: "pending",
-                rawItem: itemWinner.rawPayload,
-              },
-              campaignName: effectiveCampaignName,
-              campaignId: campaignId,
-              totalRaised: campaignSummary?.totalRaised,
-              targetGoal: campaignSummary?.targetGoal,
-              receivedAt: itemWinner.endedAt || new Date().toISOString(),
-              source: "poll",
-              discordStatus: "pending",
-              rawPayload: itemWinner.rawPayload,
-            };
-
-            // Remove the generic placeholder if one existed so it is replaced with rich auction winner data
-            if (genericIndex !== -1) {
-              state.donations.splice(genericIndex, 1);
-            }
-
-            // Dispatch the rich auction winner card with prize and shipping info!
-            const dispatchResult = await dispatchDiscordAlert(auctionRecord, state.discord);
-            auctionRecord.discordStatus = dispatchResult.success ? "sent" : "failed";
-            auctionRecord.discordError = dispatchResult.error;
-            newCount++;
-
-            state.seenAuctionIds.add(aucId);
-            state.donations.unshift(auctionRecord);
+          if (created) {
+            // New auction record created: dispatch to Discord
+            const dispatchResult = await dispatchDiscordAlert(record, state.discord);
+            record.discordStatus = dispatchResult.success ? "sent" : "failed";
+            record.discordError = dispatchResult.error;
+            if (dispatchResult.success) newCount++;
             state.botStatus.totalAuctionsProcessed = (state.botStatus.totalAuctionsProcessed || 0) + 1;
-            state.botStatus.lastDonationTimestamp = auctionRecord.receivedAt;
-          } else {
-            // Already recorded as auction: update details and send if not sent yet
-            const existing = state.donations[existingAuctionIndex];
-            if (itemWinner.winningBid > 0 && (existing.amount !== itemWinner.winningBid || existing.amount <= 2.0)) {
-              existing.amount = itemWinner.winningBid;
-              if (existing.auction) {
-                existing.auction.winningBid = itemWinner.winningBid;
-              }
-            }
-            if (resolvedAddress && (!existing.auction?.shippingAddress || isSurveyPlaceholder(existing.auction?.shippingAddress))) {
-              if (existing.auction) existing.auction.shippingAddress = resolvedAddress;
-            }
-            if (resolvedEmail && (!existing.auction?.winnerEmail || isSurveyPlaceholder(existing.auction?.winnerEmail))) {
-              if (existing.auction) existing.auction.winnerEmail = resolvedEmail;
-            }
-            if (existing.discordStatus !== "sent") {
-              const dispatchResult = await dispatchDiscordAlert(existing, state.discord);
-              existing.discordStatus = dispatchResult.success ? "sent" : "failed";
-              existing.discordError = dispatchResult.error;
-              if (dispatchResult.success) newCount++;
-            }
+          } else if (enriched && record.discordStatus !== "sent") {
+            // Enriched generic donation: send auction winner card if not already dispatched
+            const dispatchResult = await dispatchDiscordAlert(record, state.discord);
+            record.discordStatus = dispatchResult.success ? "sent" : "failed";
+            record.discordError = dispatchResult.error;
+            if (dispatchResult.success) newCount++;
           }
         }
+
+        deduplicateStateDonations();
       } catch (aucErr: any) {
         console.warn("[Tiltify Poll] Auction query note:", aucErr.message);
       }
@@ -4745,75 +4812,37 @@ async function fetchAllCampaignHistory(campaignId: string) {
     });
 
     for (const itemWinner of fullFetch.auctions) {
-      const aucId = itemWinner.itemId;
       const isEnded = itemWinner.status === "completed" || Boolean(itemWinner.endedAt && new Date(itemWinner.endedAt).getTime() <= Date.now());
       if (!isEnded) continue;
       if (!itemWinner.winningBid || itemWinner.winningBid <= 0) continue;
 
-      let resolvedAddress = itemWinner.shippingAddress;
-      let resolvedEmail = itemWinner.winnerEmail;
-      if (isSurveyPlaceholder(resolvedAddress)) resolvedAddress = undefined;
-      if (isSurveyPlaceholder(resolvedEmail)) resolvedEmail = undefined;
-
-      const existingAuctionIndex = state.donations.findIndex(
-        (d) => d.id === `auc-${aucId}` || d.tiltifyId === aucId || d.auction?.auctionId === aucId
-      );
-
-      if (existingAuctionIndex === -1) {
-        const auctionRecord: DonationRecord = {
-          id: `auc-${aucId}`,
-          tiltifyId: aucId,
-          eventType: "auction_ended",
-          donorName: itemWinner.winnerName || "Auction Winner",
-          donorEmail: resolvedEmail,
-          amount: itemWinner.winningBid,
-          currency: itemWinner.currency,
-          auction: {
-            auctionId: itemWinner.itemId,
-            itemTitle: itemWinner.itemTitle,
-            itemDescription: itemWinner.itemDescription,
-            winningBid: itemWinner.winningBid,
-            currency: itemWinner.currency,
-            winnerName: itemWinner.winnerName,
-            winnerEmail: resolvedEmail,
-            endedAt: itemWinner.endedAt,
-            prizeType: itemWinner.prizeType || "physical",
-            prizeDetails: itemWinner.itemTitle,
-            shippingAddress: resolvedAddress,
-            specialInstructions: itemWinner.specialInstructions,
-            shippingStatus: "pending",
-            rawItem: itemWinner.rawPayload,
-          },
-          campaignName: effectiveCampaignName,
-          campaignId: targetUuid,
-          totalRaised: campaignSummary?.totalRaised,
-          targetGoal: campaignSummary?.targetGoal,
-          receivedAt: itemWinner.endedAt || new Date().toISOString(),
-          source: "poll",
-          discordStatus: "pending",
-          rawPayload: itemWinner.rawPayload,
-        };
-        state.donations.push(auctionRecord);
-        state.seenAuctionIds.add(aucId);
+      const result = mergeOrEnrichAuctionDonation(itemWinner, effectiveCampaignName, targetUuid);
+      if (result.created) {
         newAuctionsImported++;
       }
     }
+
+    // Purge duplicate records so auction winning payments aren't counted twice
+    deduplicateStateDonations();
   } catch (aucErr: any) {
     console.warn("[Backfill Engine] Auction fetch note:", aucErr.message);
   }
 
-  // Anchor totalAmountProcessed to authoritative summary
-  if (campaignSummary && typeof campaignSummary.totalRaised === "number" && campaignSummary.totalRaised > 0) {
-    state.botStatus.totalAmountProcessed = campaignSummary.totalRaised;
-  }
-  state.botStatus.totalDonationsProcessed = state.donations.length;
-  saveDonationsToDisk();
-
-  // Calculate comprehensive backfill statistics
-  const donationsOnly = state.donations.filter((d) => !d.auction && d.eventType !== "auction_ended");
-  const auctionsOnly = state.donations.filter((d) => Boolean(d.auction) || d.eventType === "auction_ended");
+  // Calculate clean, deduplicated backfill statistics
+  const donationsOnly = state.donations.filter((d) => !d.auction && d.eventType !== "auction_ended" && !d.isAuctionDonation);
+  const auctionsOnly = state.donations.filter((d) => Boolean(d.auction) || d.eventType === "auction_ended" || d.isAuctionDonation);
   const unsentCount = state.donations.filter((d) => d.discordStatus !== "sent").length;
   const sentCount = state.donations.filter((d) => d.discordStatus === "sent").length;
+
+  const directDonationsTotal = donationsOnly.reduce((s, d) => s + (d.amount || 0), 0);
+  const auctionsTotal = auctionsOnly.reduce((s, d) => s + (d.amount || (d.auction?.winningBid || 0)), 0);
+  const authoritativeTotal = (campaignSummary && typeof campaignSummary.totalRaised === "number" && campaignSummary.totalRaised > 0)
+    ? campaignSummary.totalRaised
+    : Math.round((directDonationsTotal + auctionsTotal) * 100) / 100;
+
+  state.botStatus.totalAmountProcessed = authoritativeTotal;
+  state.botStatus.totalDonationsProcessed = state.donations.length;
+  saveDonationsToDisk();
 
   // Find date range
   const validTimestamps = state.donations
@@ -4829,7 +4858,9 @@ async function fetchAllCampaignHistory(campaignId: string) {
     stats: {
       totalDonations: donationsOnly.length,
       totalAuctions: auctionsOnly.length,
-      totalAmount: state.botStatus.totalAmountProcessed,
+      directDonationsTotal,
+      auctionsTotal,
+      totalAmount: authoritativeTotal,
       unsentCount,
       sentCount,
       earliestDate,

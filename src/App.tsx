@@ -160,14 +160,15 @@ export default function App() {
             if (b.botToken && !serverDiscord.botToken) { mergedDiscord.botToken = b.botToken; needsRestoreSync = true; }
             if (b.channelId && !serverDiscord.channelId) { mergedDiscord.channelId = b.channelId; needsRestoreSync = true; }
             if (b.botUsername && b.botUsername !== 'Tiltify Donation Bot' && (!serverDiscord.botUsername || serverDiscord.botUsername === 'Tiltify Donation Bot')) { mergedDiscord.botUsername = b.botUsername; needsRestoreSync = true; }
-            if (b.botAvatarUrl && !serverDiscord.botAvatarUrl) { mergedDiscord.botAvatarUrl = b.botAvatarUrl; needsRestoreSync = true; }
+            if (b.botAvatarUrl && b.botAvatarUrl !== 'https://tiltify.com/favicon.ico' && (!serverDiscord.botAvatarUrl || serverDiscord.botAvatarUrl === 'https://tiltify.com/favicon.ico')) { mergedDiscord.botAvatarUrl = b.botAvatarUrl; needsRestoreSync = true; }
             if (b.embedColor && b.embedColor !== '#00d1b2' && (!serverDiscord.embedColor || serverDiscord.embedColor === '#00d1b2')) { mergedDiscord.embedColor = b.embedColor; needsRestoreSync = true; }
             if (b.auctionEmbedColor && !serverDiscord.auctionEmbedColor) { mergedDiscord.auctionEmbedColor = b.auctionEmbedColor; needsRestoreSync = true; }
             if (b.campaignName && !serverDiscord.campaignName) { mergedDiscord.campaignName = b.campaignName; needsRestoreSync = true; }
             if (b.embedTitleTemplate && !serverDiscord.embedTitleTemplate) { mergedDiscord.embedTitleTemplate = b.embedTitleTemplate; needsRestoreSync = true; }
-            if (b.footerText && !serverDiscord.footerText) { mergedDiscord.footerText = b.footerText; needsRestoreSync = true; }
+            if (b.footerText && (!serverDiscord.footerText || serverDiscord.footerText === 'Tiltify Donation Alerts')) { mergedDiscord.footerText = b.footerText; needsRestoreSync = true; }
             if (b.footerIconUrl && !serverDiscord.footerIconUrl) { mergedDiscord.footerIconUrl = b.footerIconUrl; needsRestoreSync = true; }
-            if (b.auctionFooterText && !serverDiscord.auctionFooterText) { mergedDiscord.auctionFooterText = b.auctionFooterText; needsRestoreSync = true; }
+            if (b.auctionFooterText && (!serverDiscord.auctionFooterText || serverDiscord.auctionFooterText === 'Tiltify Auction House • Winner Fulfillment')) { mergedDiscord.auctionFooterText = b.auctionFooterText; needsRestoreSync = true; }
+            if (b.showEmbedTimestamp !== undefined && b.showEmbedTimestamp !== serverDiscord.showEmbedTimestamp) { mergedDiscord.showEmbedTimestamp = b.showEmbedTimestamp; needsRestoreSync = true; }
             if (b.separateAuctionChannel !== undefined && b.separateAuctionChannel !== serverDiscord.separateAuctionChannel) { mergedDiscord.separateAuctionChannel = b.separateAuctionChannel; needsRestoreSync = true; }
             if (b.auctionWebhookUrl && !serverDiscord.auctionWebhookUrl) { mergedDiscord.auctionWebhookUrl = b.auctionWebhookUrl; needsRestoreSync = true; }
             if (b.auctionChannelId && !serverDiscord.auctionChannelId) { mergedDiscord.auctionChannelId = b.auctionChannelId; needsRestoreSync = true; }
@@ -176,6 +177,12 @@ export default function App() {
             if (b.dualPostAuctions !== undefined && serverDiscord.dualPostAuctions === undefined) { mergedDiscord.dualPostAuctions = b.dualPostAuctions; needsRestoreSync = true; }
             if (b.auctionMentionType && !serverDiscord.auctionMentionType) { mergedDiscord.auctionMentionType = b.auctionMentionType; needsRestoreSync = true; }
             if (b.auctionMentionRoleId && !serverDiscord.auctionMentionRoleId) { mergedDiscord.auctionMentionRoleId = b.auctionMentionRoleId; needsRestoreSync = true; }
+            if (b.matchAuctionDonationColor !== undefined && b.matchAuctionDonationColor !== serverDiscord.matchAuctionDonationColor) { mergedDiscord.matchAuctionDonationColor = b.matchAuctionDonationColor; needsRestoreSync = true; }
+            if (b.enableTeamMemberColors !== undefined && b.enableTeamMemberColors !== serverDiscord.enableTeamMemberColors) { mergedDiscord.enableTeamMemberColors = b.enableTeamMemberColors; needsRestoreSync = true; }
+            if (b.teamMemberColors && Object.keys(b.teamMemberColors).length > 0 && (!serverDiscord.teamMemberColors || Object.keys(serverDiscord.teamMemberColors).length === 0)) { mergedDiscord.teamMemberColors = b.teamMemberColors; needsRestoreSync = true; }
+            if (b.customAvatarName && !serverDiscord.customAvatarName) { mergedDiscord.customAvatarName = b.customAvatarName; needsRestoreSync = true; }
+            if (b.customThumbnailName && !serverDiscord.customThumbnailName) { mergedDiscord.customThumbnailName = b.customThumbnailName; needsRestoreSync = true; }
+            if (b.customBannerName && !serverDiscord.customBannerName) { mergedDiscord.customBannerName = b.customBannerName; needsRestoreSync = true; }
           }
 
           // Restore Tiltify custom fields

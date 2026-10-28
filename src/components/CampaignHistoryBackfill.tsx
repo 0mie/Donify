@@ -124,13 +124,20 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
     }
   }, [discordConfig.webhookUrl]);
 
-  // Calculate statistics from donations
-  const donationsOnly = donations.filter((d) => !d.auction && d.eventType !== 'auction_ended');
-  const auctionsOnly = donations.filter((d) => Boolean(d.auction) || d.eventType === 'auction_ended');
+  // Calculate statistics from donations: distinguish pure direct donations from auction winning payments
+  const isAuctionItem = (d: DonationRecord) =>
+    Boolean(d.auction) || d.eventType === 'auction_ended' || Boolean(d.isAuctionDonation);
+
+  const auctionsOnly = donations.filter((d) => isAuctionItem(d));
+  const donationsOnly = donations.filter((d) => !isAuctionItem(d));
   const unsentList = donations.filter((d) => d.discordStatus !== 'sent');
   const sentList = donations.filter((d) => d.discordStatus === 'sent');
 
-  const totalRaisedSum = donations.reduce((sum, d) => sum + (typeof d.amount === 'number' ? d.amount : 0), 0);
+  const directDonationsSum = donationsOnly.reduce((s, d) => s + (typeof d.amount === 'number' ? d.amount : 0), 0);
+  const auctionsSum = auctionsOnly.reduce((s, d) => s + (typeof d.amount === 'number' ? d.amount : (d.auction?.winningBid || 0)), 0);
+
+  // Authoritative total: direct donations + auction winning bids
+  const totalRaisedSum = directDonationsSum + auctionsSum;
 
   // Chronological sort helper (Oldest first)
   const getSortedByChronology = (list: DonationRecord[]) => {
@@ -143,7 +150,7 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
 
   // Filtered list for display
   const filteredDonations = donations.filter((d) => {
-    const isAuction = Boolean(d.auction) || d.eventType === 'auction_ended';
+    const isAuction = isAuctionItem(d);
     if (tableTab === 'unsent' && d.discordStatus === 'sent') return false;
     if (tableTab === 'sent' && d.discordStatus !== 'sent') return false;
     if (tableTab === 'donations' && isAuction) return false;
@@ -318,7 +325,7 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
   const handleExecuteBatchDispatch = async () => {
     // Get candidate items to dispatch
     let candidateItems = donations.filter((d) => {
-      const isAuction = Boolean(d.auction) || d.eventType === 'auction_ended';
+      const isAuction = isAuctionItem(d);
       if (dispatchFilter === 'donations' && isAuction) return false;
       if (dispatchFilter === 'auctions' && !isAuction) return false;
       if (onlyUnsent && d.discordStatus === 'sent') return false;
@@ -591,7 +598,7 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
             {donationsOnly.length}
           </div>
           <div className="text-[11px] text-teal-400 mt-0.5">
-            ${donationsOnly.reduce((s, d) => s + (d.amount || 0), 0).toFixed(2)} total
+            ${directDonationsSum.toFixed(2)} total
           </div>
         </div>
 
@@ -604,7 +611,7 @@ export const CampaignHistoryBackfill: React.FC<CampaignHistoryBackfillProps> = (
             {auctionsOnly.length}
           </div>
           <div className="text-[11px] text-amber-400 mt-0.5">
-            ${auctionsOnly.reduce((s, d) => s + (d.amount || 0), 0).toFixed(2)} in winning bids
+            ${auctionsSum.toFixed(2)} in winning bids
           </div>
         </div>
 

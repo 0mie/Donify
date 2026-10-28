@@ -493,18 +493,6 @@ export const DiscordMessagePreview: React.FC<DiscordMessagePreviewProps> = ({
                 </div>
 
                 {/* Embed Fields Grid / Summary based on layout */}
-                {/* 🔨 Auction Winning Donation Field Banner */}
-                {isAuctionDonation && config.matchAuctionDonationColor !== false && (
-                  <div className="mb-3 bg-[#232428]/90 border border-amber-500/40 p-2.5 rounded-lg text-[12px] flex items-start gap-2">
-                    <span className="text-amber-400 font-bold">🔨</span>
-                    <div>
-                      <div className="text-amber-300 font-semibold text-[11px] uppercase tracking-wider">Auction Winning Donation</div>
-                      <div className="text-[#dbdee1] text-xs">
-                        This donation is linked to an auction winning bid on <strong>{sampleDonation.campaignName}</strong>!
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {config.embedLayout === 'compact' ? (
                   /* ⚡ COMPACT LAYOUT: Streamlined horizontal stats bar for high volume streams */
